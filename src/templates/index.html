@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>판서노트</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>판서노트 <small>(개발 중)</small></h1>
+  <p>판서 사진을 올리면 글자를 인식합니다.</p>
+
+  <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="document.getElementById('btn').value='처리 중...'; document.getElementById('btn').disabled=true;">
+    <input type="file" name="image" accept="image/jpeg,image/png" required>
+    <input type="submit" id="btn" value="업로드">
+  </form>
+  <p class="hint">JPG, PNG / 최대 10MB. 처음 실행할 때는 OCR 모델을 받느라 오래 걸릴 수 있음.</p>
+
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  {% if original_url %}
+  <hr>
+  <h2>1. 이미지</h2>
+  <table class="images">
+    <tr>
+      <th>원본</th>
+      <th>전처리 (OpenCV)</th>
+    </tr>
+    <tr>
+      <td><img src="{{ original_url }}" alt="원본"></td>
+      <td><img src="{{ processed_url }}" alt="전처리"></td>
+    </tr>
+  </table>
+  {% endif %}
+
+  {% if lines is defined %}
+  <h2>2. 인식된 텍스트 (PaddleOCR)</h2>
+  {% if lines %}
+  <textarea rows="12" readonly>{{ text }}</textarea>
+
+  <h3>줄별 결과</h3>
+  <table class="result">
+    <tr><th>#</th><th>텍스트</th><th>신뢰도</th></tr>
+    {% for line in lines %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ line.text }}</td>
+      <td>{{ line.score }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p>인식된 글자가 없습니다.</p>
+  {% endif %}
+  {% endif %}
+</body>
+</html>

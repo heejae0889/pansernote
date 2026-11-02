@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+
+# 업로드된 사진
+src/static/uploads/

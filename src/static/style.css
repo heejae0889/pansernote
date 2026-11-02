@@ -1,0 +1,45 @@
+body {
+  font-family: sans-serif;
+  max-width: 1000px;
+  margin: 20px auto;
+  padding: 0 16px;
+}
+
+h1 small {
+  font-size: 14px;
+  color: gray;
+}
+
+.hint {
+  font-size: 13px;
+  color: gray;
+}
+
+.error {
+  color: red;
+  font-weight: bold;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #999;
+  padding: 6px;
+  vertical-align: top;
+}
+
+.images {
+  table-layout: fixed;
+}
+
+.images img {
+  width: 100%;
+}
+
+textarea {
+  width: 100%;
+  font-size: 15px;
+}
