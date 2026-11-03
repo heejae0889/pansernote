@@ -39,6 +39,16 @@ th, td {
   width: 100%;
 }
 
+.compare {
+  table-layout: fixed;
+  margin-top: 12px;
+}
+
+.compare > tbody > tr > td {
+  border: none;
+  padding: 0 6px;
+}
+
 textarea {
   width: 100%;
   font-size: 15px;
