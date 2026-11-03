@@ -18,6 +18,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXT = {"jpg", "jpeg", "png"}
 
+# OCR 처리 방식 (전처리 효과 비교용)
+MODES = {
+    "pre": "전처리 적용",
+    "raw": "전처리 안 함",
+    "both": "전처리 전·후 비교",
+}
+
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -37,6 +44,25 @@ def save_image(path, image):
         buf.tofile(path)
 
 
+def make_result(label, lines):
+    # OCR 결과 한 개를 화면에 보여줄 형태로 정리 (줄 수, 평균 신뢰도 포함)
+    scores = [line["score"] for line in lines]
+    avg_score = round(sum(scores) / len(scores), 3) if scores else 0
+    return {
+        "label": label,
+        "lines": lines,
+        "text": "\n".join(line["text"] for line in lines),
+        "count": len(lines),
+        "avg_score": avg_score,
+    }
+
+
+@app.context_processor
+def inject_modes():
+    # 모든 화면에서 처리 방식 목록을 쓸 수 있게 넘겨줌
+    return {"modes": MODES}
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -51,6 +77,10 @@ def upload():
     ext = get_ext(file.filename)
     if ext not in ALLOWED_EXT:
         return render_template("index.html", error="JPG, PNG 파일만 올릴 수 있습니다."), 400
+
+    mode = request.form.get("mode", "pre")
+    if mode not in MODES:
+        mode = "pre"
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
     data = np.frombuffer(file.read(), np.uint8)
@@ -69,25 +99,29 @@ def upload():
     save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
 
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
+    # 선택한 방식에 따라 원본 / 전처리 이미지를 OCR (비교는 두 번 돌림)
+    results = []
     try:
-        lines = run_ocr(processed)
+        if mode in ("raw", "both"):
+            results.append(make_result("전처리 전 (원본)", run_ocr(image)))
+        if mode in ("pre", "both"):
+            results.append(make_result("전처리 후 (OpenCV)", run_ocr(processed)))
     except Exception as e:
         app.logger.exception("OCR 실패")
         return render_template(
             "index.html",
             error=f"OCR 처리 중 오류가 났습니다: {e}",
+            mode=mode,
             original_url=url_for("static", filename=f"uploads/{original_file}"),
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         ), 500
 
-    text = "\n".join(line["text"] for line in lines)
-
     return render_template(
         "index.html",
+        mode=mode,
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
-        lines=lines,
-        text=text,
+        results=results,
     )
 
 

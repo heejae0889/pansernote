@@ -13,8 +13,14 @@
   <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="document.getElementById('btn').value='처리 중...'; document.getElementById('btn').disabled=true;">
     <input type="file" name="image" accept="image/jpeg,image/png" required>
     <input type="submit" id="btn" value="업로드">
+    <p>
+      처리 방식:
+      {% for key, label in modes.items() %}
+      <label><input type="radio" name="mode" value="{{ key }}" {% if key == mode|default('pre') %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </p>
   </form>
-  <p class="hint">JPG, PNG / 최대 10MB. 처음 실행할 때는 OCR 모델을 받느라 오래 걸릴 수 있음.</p>
+  <p class="hint">JPG, PNG / 최대 10MB. 처음 실행할 때는 OCR 모델을 받느라 오래 걸릴 수 있음. 전·후 비교는 OCR을 두 번 돌려서 더 느림.</p>
 
   {% if error %}
   <p class="error">{{ error }}</p>
@@ -35,25 +41,47 @@
   </table>
   {% endif %}
 
-  {% if lines is defined %}
-  <h2>2. 인식된 텍스트 (PaddleOCR)</h2>
-  {% if lines %}
-  <textarea rows="12" readonly>{{ text }}</textarea>
+  {% if results is defined %}
+  <h2>2. 인식 결과 (PaddleOCR)</h2>
 
-  <h3>줄별 결과</h3>
-  <table class="result">
-    <tr><th>#</th><th>텍스트</th><th>신뢰도</th></tr>
-    {% for line in lines %}
+  <table>
+    <tr><th>방식</th><th>인식된 줄 수</th><th>평균 신뢰도</th></tr>
+    {% for r in results %}
     <tr>
-      <td>{{ loop.index }}</td>
-      <td>{{ line.text }}</td>
-      <td>{{ line.score }}</td>
+      <td>{{ r.label }}</td>
+      <td>{{ r.count }}</td>
+      <td>{{ r.avg_score }}</td>
     </tr>
     {% endfor %}
   </table>
-  {% else %}
-  <p>인식된 글자가 없습니다.</p>
-  {% endif %}
+  <p class="hint">평균 신뢰도는 OCR 모델이 스스로 매긴 점수라 실제 정확도와 다를 수 있음. 정확한 비교는 정답 텍스트가 있어야 함.</p>
+
+  <table class="compare">
+    <tr>
+      {% for r in results %}
+      <td>
+        <h3>{{ r.label }}</h3>
+        {% if r.lines %}
+        <textarea rows="12" readonly>{{ r.text }}</textarea>
+
+        <h4>줄별 결과</h4>
+        <table class="result">
+          <tr><th>#</th><th>텍스트</th><th>신뢰도</th></tr>
+          {% for line in r.lines %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ line.text }}</td>
+            <td>{{ line.score }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <p>인식된 글자가 없습니다.</p>
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  </table>
   {% endif %}
 </body>
 </html>
