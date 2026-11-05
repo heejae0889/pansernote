@@ -1,32 +1,37 @@
-"""
-- 우선적으로 한글 판서가 대부분이라 lang을 korean으로 설정해놓음, 아마 나중에 더 늘려가면 될듯
-"""
+﻿"""Local Korean PaddleOCR adapter with bounded detection resolution."""
 
 _ocr = None
+OCR_VERSION = 'PP-OCRv5'
+OCR_MAX_SIDE = 2048
 
 
 def get_ocr():
     global _ocr
     if _ocr is None:
         from paddleocr import PaddleOCR
-
         _ocr = PaddleOCR(
-            lang="korean",
-            use_doc_orientation_classify=False,  # 문서 방향 분류 안 씀
-            use_doc_unwarping=False,             # 문서 펴기 안 씀
-            use_textline_orientation=False,      # 글줄 방향 분류 안 씀
+            lang='korean',
+            ocr_version=OCR_VERSION,
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
         )
     return _ocr
 
 
-def run_ocr(image):
-    """BGR 이미지(numpy 배열)를 받아서 [{"text": ..., "score": ...}, ...] 를 돌려줌"""
-    ocr = get_ocr()
-    results = ocr.predict(image)
+def run_ocr(image, *, max_side=OCR_MAX_SIDE):
+    """Return text/score rows. Bound the detector cost on large phone photos.
 
+    The original high-resolution pixels remain available to the recognition
+    stage. Do not filter low-confidence text or guess corrected wording here.
+    """
+    if max_side < 32:
+        raise ValueError('OCR max_side must be at least 32')
+    results = get_ocr().predict(image, text_det_limit_side_len=max_side,
+                                text_det_limit_type='max')
     lines = []
-    for res in results:
-        for text, score in zip(res["rec_texts"], res["rec_scores"]):
+    for result in results:
+        for text, score in zip(result['rec_texts'], result['rec_scores']):
             if text.strip():
-                lines.append({"text": text, "score": round(float(score), 3)})
+                lines.append({'text': text, 'score': round(float(score), 3)})
     return lines

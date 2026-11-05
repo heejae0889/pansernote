@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -22,8 +22,21 @@
   </form>
   <p class="hint">JPG, PNG / 최대 10MB. 처음 실행할 때는 OCR 모델을 받느라 오래 걸릴 수 있음. 전·후 비교는 OCR을 두 번 돌려서 더 느림.</p>
 
+  <p class="hint">전처리 이미지만 확인하려면 「전처리만 (OCR 없음)」을 선택하세요.</p>
+
   {% if error %}
   <p class="error">{{ error }}</p>
+  {% endif %}
+
+  {% if timings is defined %}
+  <p class="hint">
+    전처리: {{ '%.2f'|format(timings.preprocess) }}초
+    {% if timings.ocr is not none %}
+    / OCR: {{ '%.2f'|format(timings.ocr) }}초
+    {% else %}
+    / OCR은 실행하지 않았습니다.
+    {% endif %}
+  </p>
   {% endif %}
 
   {% if original_url %}
@@ -41,7 +54,7 @@
   </table>
   {% endif %}
 
-  {% if results is defined %}
+  {% if results is defined and mode != "image" %}
   <h2>2. 인식 결과 (PaddleOCR)</h2>
 
   <table>

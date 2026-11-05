@@ -1,8 +1,9 @@
-__pycache__/
-*.pyc
+﻿__pycache__/
+*.py[cod]
 venv/
 .venv/
 .env
 
-# 업로드된 사진
+# Runtime uploads and local processing output
 src/static/uploads/
+/preprocess_output/

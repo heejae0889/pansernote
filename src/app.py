@@ -6,6 +6,7 @@
 
 import os
 import uuid
+from time import perf_counter
 
 import cv2
 import numpy as np
@@ -20,6 +21,7 @@ ALLOWED_EXT = {"jpg", "jpeg", "png"}
 
 # OCR 처리 방식 (전처리 효과 비교용)
 MODES = {
+    "image": "전처리만 (OCR 없음)",
     "pre": "전처리 적용",
     "raw": "전처리 안 함",
     "both": "전처리 전·후 비교",
@@ -84,12 +86,14 @@ def upload():
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
     data = np.frombuffer(file.read(), np.uint8)
-    image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
     if image is None:
         return render_template("index.html", error="이미지를 읽을 수 없습니다."), 400
 
     # ------------------------------------------------------------------------------------------------------------------------------전처리
-    processed = preprocess_image(image)
+    preprocessing_started = perf_counter()
+    processed = preprocess_image(image, perspective=True)
+    preprocessing_seconds = perf_counter()-preprocessing_started
 
     # 화면에 보여주려고 원본/전처리 이미지 저장
     name = uuid.uuid4().hex
@@ -101,6 +105,8 @@ def upload():
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
     # 선택한 방식에 따라 원본 / 전처리 이미지를 OCR (비교는 두 번 돌림)
     results = []
+    ocr_seconds = None
+    ocr_started = perf_counter()
     try:
         if mode in ("raw", "both"):
             results.append(make_result("전처리 전 (원본)", run_ocr(image)))
@@ -116,8 +122,11 @@ def upload():
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         ), 500
 
+    if mode != "image":
+        ocr_seconds = perf_counter()-ocr_started
     return render_template(
         "index.html",
+        timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds},
         mode=mode,
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
