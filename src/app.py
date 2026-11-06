@@ -14,6 +14,7 @@ from flask import Flask, render_template, request, url_for
 
 from ocr import run_ocr
 from preprocess import preprocess_image
+from summarize import summarize
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
@@ -83,6 +84,7 @@ def upload():
     mode = request.form.get("mode", "pre")
     if mode not in MODES:
         mode = "pre"
+    summarize_on = request.form.get("summarize") == "1"
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
     data = np.frombuffer(file.read(), np.uint8)
@@ -118,19 +120,41 @@ def upload():
             "index.html",
             error=f"OCR 처리 중 오류가 났습니다: {e}",
             mode=mode,
+            summarize_on=summarize_on,
             original_url=url_for("static", filename=f"uploads/{original_file}"),
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         ), 500
 
     if mode != "image":
         ocr_seconds = perf_counter()-ocr_started
+
+    # ------------------------------------------------------------------------------------------------------------------------------정리·요약
+    # 비교 모드면 전처리 후 결과로 요약, 전처리만 모드는 요약 안 함
+    summary, summary_error, summary_seconds = None, None, None
+    summary_label = results[-1]["label"] if results else None
+    if summarize_on and results:
+        ocr_text = results[-1]["text"]
+        if not ocr_text.strip():
+            summary_error = "인식된 글자가 없어서 요약하지 않았습니다."
+        else:
+            summary_started = perf_counter()
+            try:
+                summary = summarize(ocr_text)
+            except Exception as e:  # 요약이 실패해도 OCR 결과는 보여줌
+                summary_error = str(e)
+            summary_seconds = perf_counter()-summary_started
+
     return render_template(
         "index.html",
-        timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds},
+        timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds, "summary": summary_seconds},
         mode=mode,
+        summarize_on=summarize_on,
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         results=results,
+        summary=summary,
+        summary_error=summary_error,
+        summary_label=summary_label,
     )
 
 

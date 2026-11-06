@@ -18,6 +18,7 @@ h1 small {
 .error {
   color: red;
   font-weight: bold;
+  white-space: pre-line;
 }
 
 table {
@@ -52,4 +53,20 @@ th, td {
 textarea {
   width: 100%;
   font-size: 15px;
+}
+
+/* Gemini 정리 결과 */
+.summary {
+  border: 1px solid #999;
+  padding: 4px 16px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.summary table {
+  width: auto;
+}
+
+details {
+  margin-top: 8px;
 }
