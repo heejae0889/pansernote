@@ -4,7 +4,7 @@ from itertools import combinations
 import cv2
 import numpy as np
 
-MAX_SIDE = 2800
+MAX_SIDE = 1600
 DARK_THRESHOLD = 127
 _EDGE_SAMPLES = np.linspace(.06, .94, 90)[None, :, None]
 _GRID_SAMPLES = np.linspace(.10, .90, 13)[:, None]

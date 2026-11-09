@@ -2,7 +2,7 @@
 
 _ocr = None
 OCR_VERSION = 'PP-OCRv5'
-OCR_MAX_SIDE = 2048
+OCR_MAX_SIDE = 1280
 
 
 def get_ocr():
