@@ -1,4 +1,4 @@
-﻿/* Keep LaTeX out of the Markdown parser, then render it into sanitized DOM. */
+/* Keep LaTeX out of the Markdown parser, then render it into sanitized DOM. */
 (function () {
   'use strict';
 
@@ -30,7 +30,23 @@
         return displayMode ? '\n\n' + token + '\n\n' : token;
       }
     );
-    target.innerHTML = DOMPurify.sanitize(marked.parse(protectedText, { gfm: true }), {
+    // CommonMark treats punctuation before a Korean particle as a word boundary.
+    // Accept Gemini's **term(English)**의 spelling without changing code blocks.
+    const markdown = new marked.Marked({ gfm: true });
+    markdown.use({ extensions: [{
+      name: 'koreanStrong',
+      level: 'inline',
+      start(src) { return src.indexOf('**'); },
+      tokenizer(src) {
+        const match = /^\*\*(\S[^*\n]*?[\p{P}\p{S}])\*\*(?=[가-힣])/u.exec(src);
+        if (match) return {
+          type: 'koreanStrong', raw: match[0],
+          tokens: this.lexer.inlineTokens(match[1])
+        };
+      },
+      renderer(token) { return '<strong>' + this.parser.parseInline(token.tokens) + '</strong>'; }
+    }] });
+    target.innerHTML = DOMPurify.sanitize(markdown.parse(protectedText), {
       ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'b', 'em', 'i', 's', 'del', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'a'],
       ALLOWED_ATTR: ['href', 'title', 'start', 'colspan', 'rowspan']
     });
