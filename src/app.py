@@ -20,13 +20,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXT = {"jpg", "jpeg", "png"}
 
-# OCR 처리 방식 (전처리 효과 비교용)
-MODES = {
-    "image": "전처리만 (OCR 없음)",
-    "pre": "전처리 적용",
-    "raw": "전처리 안 함",
-    "both": "전처리 전·후 비교",
-}
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 
@@ -60,12 +53,6 @@ def make_result(label, lines):
     }
 
 
-@app.context_processor
-def inject_modes():
-    # 모든 화면에서 처리 방식 목록을 쓸 수 있게 넘겨줌
-    return {"modes": MODES}
-
-
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -81,10 +68,6 @@ def upload():
     if ext not in ALLOWED_EXT:
         return render_template("index.html", error="JPG, PNG 파일만 올릴 수 있습니다."), 400
 
-    mode = request.form.get("mode", "pre")
-    if mode not in MODES:
-        mode = "pre"
-    summarize_on = request.form.get("summarize") == "1"
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
     data = np.frombuffer(file.read(), np.uint8)
@@ -94,7 +77,11 @@ def upload():
 
     # ------------------------------------------------------------------------------------------------------------------------------전처리
     preprocessing_started = perf_counter()
-    processed = preprocess_image(image, perspective=True)
+    try:
+        processed = preprocess_image(image, perspective=True)
+    except Exception:
+        app.logger.exception("이미지 전처리 실패")
+        return render_template("index.html", error="사진을 보정하지 못했습니다. 다른 사진으로 다시 시도해 주세요."), 500
     preprocessing_seconds = perf_counter()-preprocessing_started
 
     # 화면에 보여주려고 원본/전처리 이미지 저장
@@ -105,34 +92,28 @@ def upload():
     save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
 
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
-    # 선택한 방식에 따라 원본 / 전처리 이미지를 OCR (비교는 두 번 돌림)
+    # 보정한 이미지에서 문자를 추출합니다.
     results = []
     ocr_seconds = None
     ocr_started = perf_counter()
     try:
-        if mode in ("raw", "both"):
-            results.append(make_result("전처리 전 (원본)", run_ocr(image)))
-        if mode in ("pre", "both"):
-            results.append(make_result("전처리 후 (OpenCV)", run_ocr(processed)))
+        results.append(make_result("추출한 글자", run_ocr(processed)))
     except Exception as e:
         app.logger.exception("OCR 실패")
         return render_template(
             "index.html",
             error=f"OCR 처리 중 오류가 났습니다: {e}",
-            mode=mode,
-            summarize_on=summarize_on,
             original_url=url_for("static", filename=f"uploads/{original_file}"),
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         ), 500
 
-    if mode != "image":
-        ocr_seconds = perf_counter()-ocr_started
+    ocr_seconds = perf_counter()-ocr_started
 
     # ------------------------------------------------------------------------------------------------------------------------------정리·요약
-    # 비교 모드면 전처리 후 결과로 요약, 전처리만 모드는 요약 안 함
+    # 추출한 글자를 자동으로 정리하고 요약합니다.
     summary, summary_error, summary_seconds = None, None, None
     summary_label = results[-1]["label"] if results else None
-    if summarize_on and results:
+    if results:
         ocr_text = results[-1]["text"]
         if not ocr_text.strip():
             summary_error = "인식된 글자가 없어서 요약하지 않았습니다."
@@ -147,8 +128,6 @@ def upload():
     return render_template(
         "index.html",
         timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds, "summary": summary_seconds},
-        mode=mode,
-        summarize_on=summarize_on,
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         results=results,

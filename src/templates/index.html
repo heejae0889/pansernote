@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
@@ -10,123 +10,88 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/contrib/auto-render.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/marked@16.4.2/lib/marked.umd.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.3.1/dist/purify.min.js"></script>
   <script defer src="{{ url_for('static', filename='render.js') }}"></script>
   {% endif %}
 </head>
 <body>
-  <h1>판서노트 <small>(개발 중)</small></h1>
-  <p>판서 사진을 올리면 글자를 인식합니다.</p>
-
-  <form action="/upload" method="post" enctype="multipart/form-data" onsubmit="document.getElementById('btn').value='처리 중...'; document.getElementById('btn').disabled=true;">
-    <input type="file" name="image" accept="image/jpeg,image/png" required>
-    <input type="submit" id="btn" value="업로드">
-    <p>
-      처리 방식:
-      {% for key, label in modes.items() %}
-      <label><input type="radio" name="mode" value="{{ key }}" {% if key == mode|default('pre') %}checked{% endif %}> {{ label }}</label>
-      {% endfor %}
-    </p>
-    <p>
-      <label><input type="checkbox" name="summarize" value="1" {% if summarize_on|default(true) %}checked{% endif %}> Gemini로 정리·요약하기</label>
-    </p>
-  </form>
-  <p class="hint">JPG, PNG / 최대 10MB. 처음 실행할 때는 OCR 모델을 받느라 오래 걸릴 수 있음. 전·후 비교는 OCR을 두 번 돌려서 더 느림.</p>
-
-  <p class="hint">전처리 이미지만 확인하려면 「전처리만 (OCR 없음)」을 선택하세요.</p>
-
-  {% if error %}
-  <p class="error">{{ error }}</p>
-  {% endif %}
-
-  {% if timings is defined %}
-  <p class="hint">
-    전처리: {{ '%.2f'|format(timings.preprocess) }}초
-    {% if timings.ocr is not none %}
-    / OCR: {{ '%.2f'|format(timings.ocr) }}초
-    {% else %}
-    / OCR은 실행하지 않았습니다.
+  <header class="site-header"><a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 5h17v23H7z" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h6M4 16h6M4 22h6M14 11h6M14 16h6M14 21h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>판서노트<span>Pansernote</span></a></header>
+  <main>
+    <div class="workspace">
+      <section class="upload-card" aria-labelledby="upload-title">
+        <div class="section-heading"><span class="step" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3h10l4 4v14H5zM14 3v5h5M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><h2 id="upload-title">사진 업로드</h2></div>
+        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
+          <label class="file-zone" for="image">
+            <span class="upload-icon"><svg viewBox="0 0 80 72" fill="none" aria-hidden="true"><rect x="20" y="8" width="43" height="53" rx="2" transform="rotate(9 20 8)" fill="#f1e5e2" stroke="#cba8a2"/><rect x="12" y="12" width="44" height="54" rx="2" fill="white" stroke="currentColor" stroke-width="1.7"/><path d="M19 21h7m-7 0v7m30-7h-7m7 0v7M19 57h7m-7 0v-7m30 7h-7m7 0v-7" stroke="currentColor" stroke-width="1.5"/><path d="M34 46V31m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <strong>판서 또는 필기 사진 업로드</strong>
+            <span class="file-caption">JPG · JPEG · PNG / 최대 10MB</span>
+            <span class="file-picker"><span aria-hidden="true">파일 선택</span><input type="file" id="image" name="image" accept="image/jpeg,image/png" required aria-label="판서 또는 필기 사진 선택" aria-describedby="file-status"></span>
+            <span id="file-status" class="file-status" role="status">선택한 파일 없음</span>
+          </label>
+          <p class="pipeline">이미지 전처리 → 글자 추출 → Gemini 요약</p>
+          <button type="submit" id="btn">글자 추출하고 요약하기 <span aria-hidden="true">→</span></button>
+          <p id="processing-status" class="processing-status" role="status" hidden>이미지 전처리, 글자 추출, Gemini 요약을 순서대로 진행합니다. 잠시 기다려 주세요.</p>
+          <p class="hint">요약을 위해 추출된 텍스트가 Google Gemini로 전송됩니다.</p>
+        </form>
+        {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+      </section>
+      <aside class="info-panel">
+        <section aria-labelledby="features-title"><h2 id="features-title">제공하는 기능</h2>
+          <ul class="features">
+            <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4m8 0h4v4M4 16v4h4m8 0h4v-4M8 9l8-2 1 9-9 1z"/></svg></span><div><h3>이미지 전처리</h3><p>사진을 자동 보정하고 원본과 보정 사진을 함께 보여줍니다.</p></div></li>
+            <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M12 5v14M8 19h8M4 10V5m16 5V5"/></svg></span><div><h3>글자 추출</h3><p>보정된 사진에서 판서 내용을 추출합니다.</p></div></li>
+            <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4"/></svg></span><div><h3>Gemini 정리·요약</h3><p>추출한 글자를 바탕으로 필기와 핵심 내용을 정리합니다.</p></div></li>
+          </ul>
+        </section>
+        <section class="guidelines" aria-labelledby="guide-title"><h2 id="guide-title">업로드 기준</h2><ul><li>JPG, JPEG, PNG 이미지 · 최대 10MB</li><li>한 번에 사진 한 장 업로드</li><li>필기 영역의 테두리가 뚜렷하게 보이는 사진을 권장합니다.</li></ul></section>
+      </aside>
+    </div>
+    {% if original_url %}
+    <section class="results-section" aria-labelledby="result-title">
+      <div class="result-heading"><div><h2 id="result-title">처리 결과</h2></div>
+        {% if timings is defined %}<p class="hint">이미지 전처리 {{ '%.2f'|format(timings.preprocess) }}초{% if timings.ocr is not none %} · 문자 추출 {{ '%.2f'|format(timings.ocr) }}초{% endif %}</p>{% endif %}
+      </div>
+      <div class="image-grid"><figure><figcaption>원본 이미지</figcaption><img src="{{ original_url }}" alt="업로드한 원본 사진"></figure><figure><figcaption>보정 이미지</figcaption><img src="{{ processed_url }}" alt="보정된 사진"></figure></div>
+      {% if results is defined %}
+      <div class="text-grid">{% for r in results %}<article class="text-card"><div class="text-heading"><h3>{{ r.label }}</h3><span>{{ r.count }}줄 인식</span></div>
+        {% if r.lines %}<label class="sr-only" for="text-{{ loop.index }}">{{ r.label }} 추출 텍스트</label><textarea id="text-{{ loop.index }}" rows="10" readonly>{{ r.text }}</textarea>
+        <details><summary>줄별 인식 결과 · 평균 신뢰도 {{ r.avg_score }}</summary><p class="hint">신뢰도는 인식 모델의 추정값으로, 실제 정확도와 다를 수 있습니다.</p><div class="table-scroll"><table><thead><tr><th scope="col">줄</th><th scope="col">텍스트</th><th scope="col">신뢰도</th></tr></thead><tbody>{% for line in r.lines %}<tr><td>{{ loop.index }}</td><td>{{ line.text }}</td><td>{{ line.score }}</td></tr>{% endfor %}</tbody></table></div></details>
+        {% else %}<p class="empty-state">인식된 글자가 없습니다. 더 선명한 사진으로 시도해 주세요.</p>{% endif %}
+      </article>{% endfor %}</div>
+      {% endif %}
+      <article class="summary-card" aria-labelledby="summary-title">
+        <div class="text-heading"><h3 id="summary-title">Gemini 정리·요약</h3>{% if timings is defined and timings.summary is not none %}<span>{{ '%.2f'|format(timings.summary) }}초</span>{% endif %}</div>
+        {% if summary %}
+        <div class="summary-text markdown-math" data-source="summary-raw">{{ summary.text }}</div>
+        <textarea id="summary-raw" hidden>{{ summary.text }}</textarea>
+        <p class="hint" id="summary-render-status" role="status" hidden></p>
+        {% if summary.notice %}<p class="hint" role="status">{{ summary.notice }}</p>{% endif %}
+        {% elif summary_error %}<p class="error" role="alert">{{ summary_error }}</p>
+        {% else %}<p class="hint">글자 추출에 성공하면 요약 결과가 표시됩니다.</p>{% endif %}
+      </article>
+    </section>
     {% endif %}
-    {% if timings.summary is not none %}
-    / 요약: {{ '%.2f'|format(timings.summary) }}초
-    {% endif %}
-  </p>
-  {% endif %}
-
-  {% if original_url %}
-  <hr>
-  <h2>1. 이미지</h2>
-  <table class="images">
-    <tr>
-      <th>원본</th>
-      <th>전처리 (OpenCV)</th>
-    </tr>
-    <tr>
-      <td><img src="{{ original_url }}" alt="원본"></td>
-      <td><img src="{{ processed_url }}" alt="전처리"></td>
-    </tr>
-  </table>
-  {% endif %}
-
-  {% if results is defined and mode != "image" %}
-  <h2>2. 인식 결과 (PaddleOCR)</h2>
-
-  <table>
-    <tr><th>방식</th><th>인식된 줄 수</th><th>평균 신뢰도</th></tr>
-    {% for r in results %}
-    <tr>
-      <td>{{ r.label }}</td>
-      <td>{{ r.count }}</td>
-      <td>{{ r.avg_score }}</td>
-    </tr>
-    {% endfor %}
-  </table>
-  <p class="hint">평균 신뢰도는 OCR 모델이 스스로 매긴 점수라 실제 정확도와 다를 수 있음. 정확한 비교는 정답 텍스트가 있어야 함.</p>
-
-  <table class="compare">
-    <tr>
-      {% for r in results %}
-      <td>
-        <h3>{{ r.label }}</h3>
-        {% if r.lines %}
-        <textarea rows="12" readonly>{{ r.text }}</textarea>
-
-        <h4>줄별 결과</h4>
-        <table class="result">
-          <tr><th>#</th><th>텍스트</th><th>신뢰도</th></tr>
-          {% for line in r.lines %}
-          <tr>
-            <td>{{ loop.index }}</td>
-            <td>{{ line.text }}</td>
-            <td>{{ line.score }}</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% else %}
-        <p>인식된 글자가 없습니다.</p>
-        {% endif %}
-      </td>
-      {% endfor %}
-    </tr>
-  </table>
-  {% endif %}
-
-  {% if summarize_on and results is defined and mode != "image" %}
-  <h2>3. 정리·요약 (Gemini)</h2>
-  {% if summary_error %}
-  <p class="error">{{ summary_error }}</p>
-  {% endif %}
-  {% if summary %}
-  <p class="hint">{{ summary_label }} 결과를 {{ summary.model }}로 정리함. 틀린 부분이 있을 수 있으니 원본과 같이 확인하기.</p>
-  {% if summary.notice %}
-  <p class="error">{{ summary.notice }}</p>
-  {% endif %}
-  <div class="markdown-math summary" data-source="summary-raw"></div>
-
-  <details>
-    <summary>원문 보기 (마크다운 / LaTeX)</summary>
-    <textarea id="summary-raw" rows="12" readonly>{{ summary.text }}</textarea>
-  </details>
-  {% endif %}
-  {% endif %}
+  </main>
+  <footer>판서노트</footer>
+  <script>
+    const fileInput = document.getElementById('image');
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      fileInput.setCustomValidity(file && file.size > 10 * 1024 * 1024 ? '10MB 이하의 사진을 선택해 주세요.' : '');
+      document.getElementById('file-status').textContent = file ? file.name : '선택한 파일 없음';
+      if (file) fileInput.reportValidity();
+    });
+    document.getElementById('upload-form').addEventListener('submit', () => {
+      const button = document.getElementById('btn');
+      button.textContent = '처리 중…';
+      button.disabled = true;
+      document.getElementById('processing-status').hidden = false;
+    });
+    window.addEventListener('pageshow', () => {
+      document.getElementById('btn').disabled = false;
+      document.getElementById('btn').innerHTML = '글자 추출하고 요약하기 <span aria-hidden="true">→</span>';
+      document.getElementById('processing-status').hidden = true;
+    });
+  </script>
 </body>
 </html>
