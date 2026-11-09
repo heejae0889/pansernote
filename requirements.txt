@@ -3,3 +3,5 @@ numpy
 opencv-contrib-python
 paddlepaddle==3.2.0
 paddleocr>=3.0,<4
+requests
+python-dotenv
