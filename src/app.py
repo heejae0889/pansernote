@@ -36,8 +36,9 @@ def save_image(path, image):
     # cv2.imwrite 는 경로에 한글이 있으면 실패할 때가 있어서 imencode 사용
     ext = os.path.splitext(path)[1]
     ok, buf = cv2.imencode(ext, image)
-    if ok:
-        buf.tofile(path)
+    if not ok:
+        raise OSError("이미지를 인코딩하지 못했습니다.")
+    buf.tofile(path)
 
 
 def make_result(label, lines):
@@ -88,8 +89,12 @@ def upload():
     name = uuid.uuid4().hex
     original_file = f"{name}_original.{ext}"
     processed_file = f"{name}_processed.png"
-    save_image(os.path.join(UPLOAD_DIR, original_file), image)
-    save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
+    try:
+        save_image(os.path.join(UPLOAD_DIR, original_file), image)
+        save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
+    except (OSError, cv2.error):
+        app.logger.exception("이미지 저장 실패")
+        return render_template("index.html", error="사진을 저장하지 못했습니다. 다시 시도해 주세요."), 500
 
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
     # 보정한 이미지에서 문자를 추출합니다.
