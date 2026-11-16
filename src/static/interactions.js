@@ -66,10 +66,10 @@
     event.preventDefault();
     dragDepth = 0;
     zone.classList.remove('is-dragging');
-    const file = event.dataTransfer.files[0];
-    if (!file || !/\.(jpe?g|png)$/i.test(file.name)) return;
+    const files = Array.from(event.dataTransfer.files);
+    if (!files.length || files.some(file => !/\.(jpe?g|png)$/i.test(file.name))) return;
     const transfer = new DataTransfer();
-    transfer.items.add(file);
+    files.forEach(file => transfer.items.add(file));
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
