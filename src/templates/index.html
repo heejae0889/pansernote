@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>판서노트</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='interactions.js') }}"></script>
   {% if summary %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.js"></script>
@@ -22,7 +23,7 @@
         <div class="section-heading"><span class="step" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3h10l4 4v14H5zM14 3v5h5M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><h2 id="upload-title">사진 업로드</h2></div>
         <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
           <label class="file-zone" for="image">
-            <span class="upload-icon"><svg viewBox="0 0 80 72" fill="none" aria-hidden="true"><rect x="20" y="8" width="43" height="53" rx="2" transform="rotate(9 20 8)" fill="#f1e5e2" stroke="#cba8a2"/><rect x="12" y="12" width="44" height="54" rx="2" fill="white" stroke="currentColor" stroke-width="1.7"/><path d="M19 21h7m-7 0v7m30-7h-7m7 0v7M19 57h7m-7 0v-7m30 7h-7m7 0v-7" stroke="currentColor" stroke-width="1.5"/><path d="M34 46V31m0 0-6 6m6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            <span class="upload-icon"><svg viewBox="0 0 96 80" fill="none" aria-hidden="true"><path d="m31 60-7 14m41-14 7 14M48 60v12" stroke="#8399b7" stroke-width="4" stroke-linecap="round"/><rect class="board-frame" x="8" y="8" width="80" height="52" rx="7" fill="#e5edf8" stroke="#8da4c3" stroke-width="2"/><rect x="13" y="13" width="70" height="42" rx="3" fill="#294563"/><g stroke="#e4efff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m23 27 6 6 9-13M47 24h24M47 32h17M23 44h20M50 44h10"/></g><path d="M9 60h78" stroke="#a3b4cd" stroke-width="4" stroke-linecap="round"/><path d="m68 48 13-16 5 4-13 16-7 3z" fill="#edf3fb" stroke="#8da4c3" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
             <strong>판서 또는 필기 사진 업로드</strong>
             <span class="file-caption">JPG · JPEG · PNG / 최대 10MB</span>
             <span class="file-picker"><span aria-hidden="true">파일 선택</span><input type="file" id="image" name="image" accept="image/jpeg,image/png" required aria-label="판서 또는 필기 사진 선택" aria-describedby="file-status"></span>
