@@ -19,10 +19,12 @@ from summarize import summarize
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXT = {"jpg", "jpeg", "png"}
+MAX_IMAGES = 5
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024 
+app.config["MAX_CONTENT_LENGTH"] = MAX_IMAGES * MAX_IMAGE_BYTES + 1024 * 1024
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
@@ -36,8 +38,9 @@ def save_image(path, image):
     # cv2.imwrite 는 경로에 한글이 있으면 실패할 때가 있어서 imencode 사용
     ext = os.path.splitext(path)[1]
     ok, buf = cv2.imencode(ext, image)
-    if ok:
-        buf.tofile(path)
+    if not ok:
+        raise OSError("이미지를 인코딩하지 못했습니다.")
+    buf.tofile(path)
 
 
 def make_result(label, lines):
@@ -60,20 +63,42 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    file = request.files.get("image")
-    if file is None or file.filename == "":
+    files = [file for file in request.files.getlist("image") if file.filename]
+    if not files:
         return render_template("index.html", error="사진을 선택해주세요."), 400
+    if len(files) > MAX_IMAGES:
+        return render_template("index.html", error="사진은 최대 5장까지 업로드할 수 있습니다."), 400
+    # Validate the entire batch before starting expensive OCR/API requests.
+    for file in files:
+        if get_ext(file.filename) not in ALLOWED_EXT:
+            return render_template("index.html", error="JPG, PNG 파일만 올릴 수 있습니다."), 400
+        file.stream.seek(0, os.SEEK_END)
+        size = file.stream.tell()
+        file.stream.seek(0)
+        if size > MAX_IMAGE_BYTES:
+            return render_template("index.html", error="사진 한 장당 최대 10MB까지 업로드할 수 있습니다."), 413
+    photos = []
+    statuses = []
+    for file in files:
+        result, status = process_file(file)
+        photos.append(dict(result, filename=file.filename))
+        statuses.append(status)
+    status = 200 if any(code == 200 for code in statuses) else max(statuses)
+    return render_template("index.html", photos=photos), status
+
+
+def process_file(file):
 
     ext = get_ext(file.filename)
     if ext not in ALLOWED_EXT:
-        return render_template("index.html", error="JPG, PNG 파일만 올릴 수 있습니다."), 400
+        return {"error": "JPG, PNG 파일만 올릴 수 있습니다."}, 400
 
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
     data = np.frombuffer(file.read(), np.uint8)
     image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
     if image is None:
-        return render_template("index.html", error="이미지를 읽을 수 없습니다."), 400
+        return {"error": "이미지를 읽을 수 없습니다."}, 400
 
     # ------------------------------------------------------------------------------------------------------------------------------전처리
     preprocessing_started = perf_counter()
@@ -81,15 +106,19 @@ def upload():
         processed = preprocess_image(image, perspective=True)
     except Exception:
         app.logger.exception("이미지 전처리 실패")
-        return render_template("index.html", error="사진을 보정하지 못했습니다. 다른 사진으로 다시 시도해 주세요."), 500
+        return {"error": "사진을 보정하지 못했습니다. 다른 사진으로 다시 시도해 주세요."}, 500
     preprocessing_seconds = perf_counter()-preprocessing_started
 
     # 화면에 보여주려고 원본/전처리 이미지 저장
     name = uuid.uuid4().hex
     original_file = f"{name}_original.{ext}"
     processed_file = f"{name}_processed.png"
-    save_image(os.path.join(UPLOAD_DIR, original_file), image)
-    save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
+    try:
+        save_image(os.path.join(UPLOAD_DIR, original_file), image)
+        save_image(os.path.join(UPLOAD_DIR, processed_file), processed)
+    except (OSError, cv2.error):
+        app.logger.exception("이미지 저장 실패")
+        return {"error": "사진을 저장하지 못했습니다. 다시 시도해 주세요."}, 500
 
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
     # 보정한 이미지에서 문자를 추출합니다.
@@ -100,8 +129,7 @@ def upload():
         results.append(make_result("추출한 글자", run_ocr(processed)))
     except Exception as e:
         app.logger.exception("OCR 실패")
-        return render_template(
-            "index.html",
+        return dict(
             error=f"OCR 처리 중 오류가 났습니다: {e}",
             original_url=url_for("static", filename=f"uploads/{original_file}"),
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
@@ -125,8 +153,7 @@ def upload():
                 summary_error = str(e)
             summary_seconds = perf_counter()-summary_started
 
-    return render_template(
-        "index.html",
+    return dict(
         timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds, "summary": summary_seconds},
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
@@ -134,12 +161,12 @@ def upload():
         summary=summary,
         summary_error=summary_error,
         summary_label=summary_label,
-    )
+    ), 200
 
 
 @app.errorhandler(413)
 def too_large(e):
-    return render_template("index.html", error="파일이 너무 큽니다. (최대 10MB)"), 413
+    return render_template("index.html", error="사진은 최대 5장, 한 장당 최대 10MB까지 업로드할 수 있습니다."), 413
 
 
 if __name__ == "__main__":

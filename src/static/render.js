@@ -3,7 +3,7 @@
   'use strict';
 
   function renderSummary(target, rawText) {
-    const status = document.getElementById('summary-render-status');
+    const status = target.closest('.summary-card').querySelector('.summary-render-status');
     function notice(message) {
       if (status) { status.textContent = message; status.hidden = false; }
     }
@@ -98,7 +98,7 @@
       try { renderSummary(target, source.value || source.textContent); }
       catch (error) {
         target.textContent = source.value || source.textContent;
-        const status = document.getElementById('summary-render-status');
+        const status = target.closest('.summary-card').querySelector('.summary-render-status');
         if (status) { status.textContent = '서식을 표시하지 못해 원문으로 표시했습니다.'; status.hidden = false; }
       }
     });
