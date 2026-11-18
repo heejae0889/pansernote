@@ -61,6 +61,7 @@
         <div class="result-actions">
           {% if timings %}<p class="hint">이미지 전처리 {{ '%.2f'|format(timings.preprocess) }}초{% if timings.ocr is not none %} · 문자 추출 {{ '%.2f'|format(timings.ocr) }}초{% endif %}</p>{% endif %}
           {% if original_url %}<button type="button" class="pdf-btn" data-filename="{{ photo.filename }}">PDF로 저장 ↓</button>{% endif %}
+          <p class="hint pdf-status" role="status" hidden></p>
         </div>
       </div>
       {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}

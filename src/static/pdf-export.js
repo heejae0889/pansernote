@@ -111,11 +111,18 @@
 
   async function exportPdf(button) {
     const section = button.closest('.results-section');
+    const status = section.querySelector('.pdf-status');
     const label = button.textContent;
-    if (!window.html2pdf) return;
+    const say = message => { if (status) { status.textContent = message; status.hidden = !message; } };
+    if (!window.html2pdf) {
+      say('PDF 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.');
+      return;
+    }
     button.disabled = true;
     button.textContent = 'PDF 만드는 중…';
+    say('');
     try {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
       const base = (button.dataset.filename || '판서노트').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_');
       const doc = await buildDocument(section, button.dataset.filename || '판서노트');
       await window.html2pdf().set({
@@ -123,8 +130,12 @@
         filename: `판서노트_${base}.pdf`,
         image: { type: 'jpeg', quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['img', 'tr', 'pre', 'blockquote', '.summary-math-block', 'h2', 'h3', 'li'] }
       }).from(doc).save();
+    } catch (error) {
+      console.error(error);
+      say('PDF를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       button.disabled = false;
       button.textContent = label;
