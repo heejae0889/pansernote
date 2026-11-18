@@ -1,0 +1,19 @@
+services:
+  pansernote:
+    build:
+      context: .
+    environment:
+      FLASK_HOST: "0.0.0.0"
+      FLASK_DEBUG: "0"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-}"
+    ports:
+      - "5001:5001"
+    volumes:
+      - panser_uploads:/app/src/static/uploads
+      - paddle_models:/root/.paddlex
+    restart: unless-stopped
+
+volumes:
+  panser_uploads:
+  paddle_models:
