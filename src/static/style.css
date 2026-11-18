@@ -174,3 +174,9 @@ textarea[hidden] { display: none; }
   .scroll-pending { opacity: 0; transform: perspective(900px) translateY(28px) rotateX(5deg); }
   .scroll-pending:not(:focus-within) { transition-delay: var(--reveal-delay, 0ms); }
 }
+
+/* PDF 저장 버튼 */
+.result-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.pdf-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 16px; border: 1px solid #334f78; border-radius: 10px; background: linear-gradient(135deg, #4d71a4, #293f65); color: #fff; font-size: 12px; font-weight: 600; box-shadow: inset 0 1px 0 #ffffff40, 0 3px 0 #1b2e4b, 0 6px 10px #263f6b30; }
+.pdf-btn:hover:not(:disabled) { background: linear-gradient(135deg, #587fb5, #314d7c); }
+@media (max-width: 720px) { .result-actions { align-items: flex-start; margin-top: 10px; } }
