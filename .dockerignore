@@ -1,6 +1,7 @@
 .git
 .github
 .venv
+.venv-local
 __pycache__
 *.pyc
 .env
