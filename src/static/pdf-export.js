@@ -68,6 +68,7 @@
       const image = document.createElement('img');
       image.alt = '원본 사진';
       image.src = await photoSource(original);
+      try { await image.decode(); } catch (error) { /* 로드 실패 시 아래 캡처에서 처리 */ }
       photo.append(image);
     } else {
       photo.append(node('p', 'pdf-note', '원본 사진이 없습니다.'));
@@ -118,18 +119,20 @@
       say('PDF 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.');
       return;
     }
+    const savedScrollY = window.scrollY;
     button.disabled = true;
     button.textContent = 'PDF 만드는 중…';
     say('');
     try {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      window.scrollTo(0, 0);
       const base = (button.dataset.filename || '판서노트').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_');
       const doc = await buildDocument(section, button.dataset.filename || '판서노트');
       await window.html2pdf().set({
         margin: [14, 14, 14, 14],
         filename: `판서노트_${base}.pdf`,
         image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'], avoid: ['img', 'tr', 'pre', 'blockquote', '.summary-math-block', 'h2', 'h3', 'li'] }
       }).from(doc).save();
@@ -137,6 +140,7 @@
       console.error(error);
       say('PDF를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
+      window.scrollTo(0, savedScrollY);
       button.disabled = false;
       button.textContent = label;
     }
