@@ -27,13 +27,13 @@ python3 -m venv .venv
 Windows에서 Docker Desktop을 설치하고 실행한 뒤 프로젝트 루트에서 다음을 실행합니다.
 
 ```powershell
-Copy-Item .env.example .env
-# .env에 GEMINI_API_KEY를 입력합니다.
-docker compose build
-docker compose up -d
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# Gemini 요약을 사용하려면 .env에 GEMINI_API_KEY를 입력합니다.
+docker compose up --build --detach --wait
+docker compose ps
 ```
 
-브라우저에서 http://localhost:5001 에 접속합니다.
+`docker compose ps`에서 `pansernote`의 상태가 `healthy`로 표시되면 브라우저에서 http://localhost:5001 에 접속합니다. 시작에 실패하면 `docker compose logs --tail 100 pansernote`로 로그를 확인합니다.
 
 ```powershell
 docker compose logs -f
