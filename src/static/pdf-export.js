@@ -7,11 +7,12 @@
     .pdf-doc { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: #202c43; font-size: 13px; line-height: 1.7; background: #fff; }
     .pdf-doc h1 { font-size: 22px; margin: 0 0 4px; color: #1f3a66; }
     .pdf-doc .pdf-meta { font-size: 11px; color: #606d83; margin: 0 0 18px; padding-bottom: 10px; border-bottom: 2px solid #365b91; }
-    .pdf-doc h2 { font-size: 16px; margin: 22px 0 10px; padding-left: 9px; border-left: 4px solid #365b91; color: #1f3a66; }
+    .pdf-doc h2 { font-size: 16px; margin: 4px 0 10px; padding-left: 9px; border-left: 4px solid #365b91; color: #1f3a66; }
     .pdf-doc h3 { font-size: 14px; margin: 14px 0 6px; }
     .pdf-doc .pdf-photo { text-align: center; }
     .pdf-doc .pdf-photo img { max-width: 100%; max-height: 520px; border: 1px solid #d5deea; }
     .pdf-doc .pdf-ocr { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px 14px; background: #f5f7fb; border: 1px solid #d5deea; border-radius: 6px; font-family: inherit; font-size: 12.5px; line-height: 1.8; }
+    .pdf-doc .pdf-line { white-space: pre-wrap; overflow-wrap: anywhere; }
     .pdf-doc .pdf-note { font-size: 11px; color: #606d83; margin: 0 0 6px; }
     .pdf-doc .pdf-error { color: #a63827; }
     .pdf-doc .pdf-summary { overflow-wrap: anywhere; }
@@ -54,6 +55,12 @@
     }
   }
 
+  function textBlock(text) {
+    const block = node('div', 'pdf-ocr');
+    text.split('\n').forEach(line => block.append(node('div', 'pdf-line', line || '\u00a0')));
+    return block;
+  }
+
   async function buildDocument(section, filename) {
     const doc = node('div', 'pdf-doc');
     doc.append(node('style', '', PDF_CSS));
@@ -76,6 +83,7 @@
     doc.append(photo);
 
     // 2. OCR 결과
+    doc.append(node('div', 'html2pdf__page-break'));
     doc.append(node('h2', '', '2. 추출한 글자 (OCR)'));
     const cards = section.querySelectorAll('.text-card');
     if (!cards.length) doc.append(node('p', 'pdf-note', '추출된 글자가 없습니다.'));
@@ -84,11 +92,12 @@
       if (count) doc.append(node('p', 'pdf-note', count.textContent));
       const area = card.querySelector('textarea');
       doc.append(area && area.value.trim()
-        ? node('pre', 'pdf-ocr', area.value)
+        ? textBlock(area.value)
         : node('p', 'pdf-note', '인식된 글자가 없습니다.'));
     });
 
     // 3. Gemini 요약
+    doc.append(node('div', 'html2pdf__page-break'));
     doc.append(node('h2', '', '3. Gemini 정리·요약'));
     const summary = section.querySelector('.summary-text');
     if (summary) {
@@ -100,7 +109,7 @@
         body.append(...clone.childNodes);
       } else {
         const raw = document.getElementById(summary.dataset.source);
-        body.append(node('pre', 'pdf-ocr', raw ? raw.value : summary.textContent));
+        body.append(textBlock(raw ? raw.value : summary.textContent));
       }
       doc.append(body);
     } else {
@@ -134,7 +143,7 @@
         image: { type: 'jpeg', quality: 0.95 },
         html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['img', 'tr', 'pre', 'blockquote', '.summary-math-block', 'h2', 'h3', 'li'] }
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['img', 'tr', 'blockquote', '.summary-math-block', 'h2', 'h3', 'li', 'p', '.pdf-line'] }
       }).from(doc).save();
     } catch (error) {
       console.error(error);
