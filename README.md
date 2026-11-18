@@ -22,6 +22,24 @@ python3 -m venv .venv
 
 브라우저에서 http://localhost:5001 에 접속합니다. 최초 OCR 실행 시 모델을 내려받습니다.
 
+### Docker 실행
+
+Windows에서 Docker Desktop을 설치하고 실행한 뒤 프로젝트 루트에서 다음을 실행합니다.
+
+```powershell
+Copy-Item .env.example .env
+# .env에 GEMINI_API_KEY를 입력합니다.
+docker compose build
+docker compose up -d
+```
+
+브라우저에서 http://localhost:5001 에 접속합니다.
+
+```powershell
+docker compose logs -f
+docker compose down
+```
+
 ### Gemini 요약 설정
 
 [Google AI Studio](https://aistudio.google.com/app/apikey)에서 API 키를 발급받고, `.env.example`을 `.env`로 복사한 뒤 `GEMINI_API_KEY`에 키를 넣습니다. `GEMINI_MODEL`을 비워두면 `gemini-3.5-flash-lite`를 사용합니다. `.env`는 Git에서 제외됩니다.
