@@ -11,6 +11,7 @@
     .pdf-doc h3 { font-size: 14px; margin: 14px 0 6px; }
     .pdf-doc .pdf-photo { text-align: center; }
     .pdf-doc .pdf-photo img { max-width: 100%; max-height: 520px; border: 1px solid #d5deea; }
+    .pdf-doc .pdf-ocr { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px 14px; background: #f5f7fb; border: 1px solid #d5deea; border-radius: 6px; font-family: inherit; font-size: 12.5px; line-height: 1.8; }
     .pdf-doc .pdf-note { font-size: 11px; color: #606d83; margin: 0 0 6px; }
   `;
 
@@ -60,6 +61,19 @@
       photo.append(node('p', 'pdf-note', '원본 사진이 없습니다.'));
     }
     doc.append(photo);
+
+    // 2. OCR 결과
+    doc.append(node('h2', '', '2. 추출한 글자 (OCR)'));
+    const cards = section.querySelectorAll('.text-card');
+    if (!cards.length) doc.append(node('p', 'pdf-note', '추출된 글자가 없습니다.'));
+    cards.forEach(card => {
+      const count = card.querySelector('.text-heading span');
+      if (count) doc.append(node('p', 'pdf-note', count.textContent));
+      const area = card.querySelector('textarea');
+      doc.append(area && area.value.trim()
+        ? node('pre', 'pdf-ocr', area.value)
+        : node('p', 'pdf-note', '인식된 글자가 없습니다.'));
+    });
 
     return doc;
   }
