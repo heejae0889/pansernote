@@ -6,6 +6,10 @@
   <title>판서노트</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script defer src="{{ url_for('static', filename='interactions.js') }}"></script>
+  {% if photos|default([]) %}
+  <script defer src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
+  <script defer src="{{ url_for('static', filename='pdf-export.js') }}"></script>
+  {% endif %}
   {% if photos|default([])|selectattr('summary')|list %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.js"></script>
@@ -54,7 +58,11 @@
     {% with original_url=photo.get('original_url'), processed_url=photo.get('processed_url'), timings=photo.get('timings'), results=photo.get('results', []), summary=photo.get('summary'), summary_error=photo.get('summary_error'), error=photo.get('error') %}
     <section class="results-section" aria-labelledby="result-title-{{ photo_index }}">
       <div class="result-heading"><div><h2 id="result-title-{{ photo_index }}">처리 결과</h2><p class="hint">{{ photo.filename }}</p></div>
-        {% if timings %}<p class="hint">이미지 전처리 {{ '%.2f'|format(timings.preprocess) }}초{% if timings.ocr is not none %} · 문자 추출 {{ '%.2f'|format(timings.ocr) }}초{% endif %}</p>{% endif %}
+        <div class="result-actions">
+          {% if timings %}<p class="hint">이미지 전처리 {{ '%.2f'|format(timings.preprocess) }}초{% if timings.ocr is not none %} · 문자 추출 {{ '%.2f'|format(timings.ocr) }}초{% endif %}</p>{% endif %}
+          {% if original_url %}<button type="button" class="pdf-btn" data-filename="{{ photo.filename }}">PDF로 저장 ↓</button>{% endif %}
+          <p class="hint pdf-status" role="status" hidden></p>
+        </div>
       </div>
       {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
       {% if original_url %}
