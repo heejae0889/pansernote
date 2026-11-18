@@ -13,6 +13,18 @@
     .pdf-doc .pdf-photo img { max-width: 100%; max-height: 520px; border: 1px solid #d5deea; }
     .pdf-doc .pdf-ocr { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px 14px; background: #f5f7fb; border: 1px solid #d5deea; border-radius: 6px; font-family: inherit; font-size: 12.5px; line-height: 1.8; }
     .pdf-doc .pdf-note { font-size: 11px; color: #606d83; margin: 0 0 6px; }
+    .pdf-doc .pdf-error { color: #a63827; }
+    .pdf-doc .pdf-summary { overflow-wrap: anywhere; }
+    .pdf-doc .pdf-summary h1, .pdf-doc .pdf-summary h2, .pdf-doc .pdf-summary h3, .pdf-doc .pdf-summary h4 { font-size: 14px; margin: 14px 0 6px; padding: 0; border: 0; color: #202c43; }
+    .pdf-doc .pdf-summary ul, .pdf-doc .pdf-summary ol { padding-left: 22px; margin: 6px 0; }
+    .pdf-doc .pdf-summary p { margin: 6px 0; }
+    .pdf-doc .pdf-summary table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; }
+    .pdf-doc .pdf-summary th, .pdf-doc .pdf-summary td { border: 1px solid #c9d4e3; padding: 5px 8px; text-align: left; }
+    .pdf-doc .pdf-summary th { background: #eef2f8; }
+    .pdf-doc .pdf-summary code { background: #eef2f8; padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+    .pdf-doc .pdf-summary pre { background: #f5f7fb; padding: 10px; border-radius: 6px; white-space: pre-wrap; }
+    .pdf-doc .pdf-summary blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid #c9d4e3; color: #606d83; }
+    .pdf-doc .summary-math-block { display: block; text-align: center; margin: 8px 0; }
   `;
 
   function node(tag, className, text) {
@@ -75,6 +87,25 @@
         : node('p', 'pdf-note', '인식된 글자가 없습니다.'));
     });
 
+    // 3. Gemini 요약
+    doc.append(node('h2', '', '3. Gemini 정리·요약'));
+    const summary = section.querySelector('.summary-text');
+    if (summary) {
+      const body = node('div', 'pdf-summary');
+      if (summary.classList.contains('is-rendered')) {
+        const clone = summary.cloneNode(true);
+        // KaTeX의 보이지 않는 MathML 사본은 PDF 캡처에서 수식이 두 번 나오게 하므로 제거한다.
+        clone.querySelectorAll('.katex-mathml').forEach(item => item.remove());
+        body.append(...clone.childNodes);
+      } else {
+        const raw = document.getElementById(summary.dataset.source);
+        body.append(node('pre', 'pdf-ocr', raw ? raw.value : summary.textContent));
+      }
+      doc.append(body);
+    } else {
+      const message = section.querySelector('.summary-card .error, .summary-card .hint');
+      doc.append(node('p', 'pdf-note pdf-error', message ? message.textContent : '요약 결과가 없습니다.'));
+    }
     return doc;
   }
 
