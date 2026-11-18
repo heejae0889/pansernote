@@ -12,6 +12,12 @@ services:
     volumes:
       - panser_uploads:/app/src/static/uploads
       - paddle_models:/root/.paddlex
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:5001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 
 volumes:
