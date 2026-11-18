@@ -1,4 +1,4 @@
-/* 처리 결과(원본 사진 + OCR 글자 + Gemini 요약)를 한 개의 PDF로 저장한다.
+/* 처리 결과(원본 사진 + Gemini 요약)를 한 개의 PDF로 저장한다.
    화면에 이미 그려진 결과(마크다운/수식 렌더링 포함)를 그대로 사용하므로 서버 작업이 필요 없다. */
 (() => {
   'use strict';
@@ -82,23 +82,9 @@
     }
     doc.append(photo);
 
-    // 2. OCR 결과
+    // 2. Gemini 요약
     doc.append(node('div', 'html2pdf__page-break'));
-    doc.append(node('h2', '', '2. 추출한 글자 (OCR)'));
-    const cards = section.querySelectorAll('.text-card');
-    if (!cards.length) doc.append(node('p', 'pdf-note', '추출된 글자가 없습니다.'));
-    cards.forEach(card => {
-      const count = card.querySelector('.text-heading span');
-      if (count) doc.append(node('p', 'pdf-note', count.textContent));
-      const area = card.querySelector('textarea');
-      doc.append(area && area.value.trim()
-        ? textBlock(area.value)
-        : node('p', 'pdf-note', '인식된 글자가 없습니다.'));
-    });
-
-    // 3. Gemini 요약
-    doc.append(node('div', 'html2pdf__page-break'));
-    doc.append(node('h2', '', '3. Gemini 정리·요약'));
+    doc.append(node('h2', '', '2. Gemini 정리·요약'));
     const summary = section.querySelector('.summary-text');
     if (summary) {
       const body = node('div', 'pdf-summary');
