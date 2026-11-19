@@ -4,16 +4,17 @@
 실행:  python src/app.py   ->  http://localhost:5001
 """
 
+import json
 import os
 import uuid
 from time import perf_counter
 
 import cv2
 import numpy as np
-from flask import Flask, render_template, request, url_for
+from flask import Flask, jsonify, render_template, request, url_for
 
 from ocr import run_ocr
-from preprocess import preprocess_image
+from preprocess import detect_board, preprocess_image, resize_max
 from summarize import summarize
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -61,33 +62,66 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/upload", methods=["POST"])
-def upload():
-    files = [file for file in request.files.getlist("image") if file.filename]
+def validate_uploads(files):
     if not files:
-        return render_template("index.html", error="사진을 선택해주세요."), 400
+        return "사진을 선택해주세요.", 400
     if len(files) > MAX_IMAGES:
-        return render_template("index.html", error="사진은 최대 5장까지 업로드할 수 있습니다."), 400
-    # Validate the entire batch before starting expensive OCR/API requests.
+        return "사진은 최대 5장까지 업로드할 수 있습니다.", 400
     for file in files:
         if get_ext(file.filename) not in ALLOWED_EXT:
-            return render_template("index.html", error="JPG, PNG 파일만 올릴 수 있습니다."), 400
+            return "JPG, PNG 파일만 올릴 수 있습니다.", 400
         file.stream.seek(0, os.SEEK_END)
         size = file.stream.tell()
         file.stream.seek(0)
         if size > MAX_IMAGE_BYTES:
-            return render_template("index.html", error="사진 한 장당 최대 10MB까지 업로드할 수 있습니다."), 413
+            return "사진 한 장당 최대 10MB까지 업로드할 수 있습니다.", 413
+    return None, 200
+
+
+def decode_upload(file):
+    data = np.frombuffer(file.read(), np.uint8)
+    return cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
+
+
+@app.route("/board-detection", methods=["POST"])
+def board_detection():
+    files = [file for file in request.files.getlist("image") if file.filename]
+    error, status = validate_uploads(files)
+    if error:
+        return jsonify(error=error), status
+    failed = []
+    for index, file in enumerate(files):
+        image = decode_upload(file)
+        if image is not None and min(image.shape[:2]) >= 2 and detect_board(resize_max(image)) is None:
+            failed.append(index)
+    return jsonify(failed=failed)
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    files = [file for file in request.files.getlist("image") if file.filename]
+    error, status = validate_uploads(files)
+    if error:
+        return render_template("index.html", error=error), status
+    try:
+        adjustments = json.loads(request.form.get("board_adjustments", "null"))
+        if adjustments is None:
+            adjustments = [None] * len(files)
+        if not isinstance(adjustments, list) or len(adjustments) != len(files):
+            raise ValueError
+    except ValueError:
+        return render_template("index.html", error="칠판 조정 정보가 올바르지 않습니다."), 400
     photos = []
     statuses = []
-    for file in files:
-        result, status = process_file(file)
+    for file, adjustment in zip(files, adjustments):
+        result, status = process_file(file, adjustment=adjustment)
         photos.append(dict(result, filename=file.filename))
         statuses.append(status)
     status = 200 if any(code == 200 for code in statuses) else max(statuses)
     return render_template("index.html", photos=photos), status
 
 
-def process_file(file):
+def process_file(file, *, adjustment=None):
 
     ext = get_ext(file.filename)
     if ext not in ALLOWED_EXT:
@@ -95,15 +129,21 @@ def process_file(file):
 
 
     # ------------------------------------------------------------------------------------------------------------------------------ 업로드된 파일 -> OpenCV 이미지
-    data = np.frombuffer(file.read(), np.uint8)
-    image = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
-    if image is None:
+    image = decode_upload(file)
+    if image is None or min(image.shape[:2]) < 2:
         return {"error": "이미지를 읽을 수 없습니다."}, 400
 
     # ------------------------------------------------------------------------------------------------------------------------------전처리
     preprocessing_started = perf_counter()
     try:
-        processed = preprocess_image(image, perspective=True)
+        # False means the user declined manual adjustment after detection failed.
+        corners = None if adjustment is False else adjustment
+        processed = preprocess_image(image, perspective=adjustment is None, corners=corners)
+    except (TypeError, ValueError):
+        if adjustment is not None and adjustment is not False:
+            return {"error": "칠판 모서리가 올바르지 않습니다. 사진을 다시 선택해 주세요."}, 400
+        app.logger.exception("이미지 전처리 실패")
+        return {"error": "사진을 보정하지 못했습니다. 다른 사진으로 다시 시도해 주세요."}, 500
     except Exception:
         app.logger.exception("이미지 전처리 실패")
         return {"error": "사진을 보정하지 못했습니다. 다른 사진으로 다시 시도해 주세요."}, 500
