@@ -200,7 +200,9 @@ def detect_board(image):
         horizontal, vertical = _line_groups(segments.reshape(-1, 4), h, w)
         for points in _frame_quads(horizontal, vertical, h, w):
             consider(points, 'frame_lines')
-    if best is None or best[0] < .60:
+    # Prefer manual selection when a partial frame or lines inside the board
+    # produce a weak quadrilateral. Cropping those candidates can cut off text.
+    if best is None or best[0] < .68:
         return None
     score, points, method, supports = best
     points = points/np.array([w/original_w, h/original_h], np.float32)
