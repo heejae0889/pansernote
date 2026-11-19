@@ -15,13 +15,14 @@ from flask import Flask, jsonify, render_template, request, url_for
 
 from ocr import run_ocr
 from preprocess import detect_board, preprocess_image, resize_max
-from summarize import summarize
+from summarize import GeminiError, summarize
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 ALLOWED_EXT = {"jpg", "jpeg", "png"}
 MAX_IMAGES = 5
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_EDITED_TEXT_LENGTH = 50_000
 
 
 app = Flask(__name__)
@@ -95,6 +96,23 @@ def board_detection():
         if image is not None and min(image.shape[:2]) >= 2 and detect_board(resize_max(image)) is None:
             failed.append(index)
     return jsonify(failed=failed)
+
+
+@app.route("/summarize-edited", methods=["POST"])
+def summarize_edited():
+    payload = request.get_json(silent=True)
+    text = payload.get("text") if isinstance(payload, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        return jsonify(error="요약할 글자를 입력해 주세요."), 400
+    if len(text) > MAX_EDITED_TEXT_LENGTH:
+        return jsonify(error="수정한 글자는 50,000자까지 요약할 수 있습니다."), 400
+
+    started = perf_counter()
+    try:
+        summary = summarize(text.strip())
+    except GeminiError as error:
+        return jsonify(error=str(error)), 502
+    return jsonify(summary=summary, seconds=perf_counter() - started)
 
 
 @app.route("/upload", methods=["POST"])
