@@ -91,16 +91,22 @@
     target.classList.add('is-rendered');
   }
 
+  function refreshSummary(target) {
+    const source = document.getElementById(target.dataset.source);
+    if (!source?.value) return;
+    const status = target.closest('.summary-card').querySelector('.summary-render-status');
+    if (status) status.hidden = true;
+    target.classList.remove('is-rendered');
+    target.textContent = source.value;
+    try { renderSummary(target, source.value); }
+    catch {
+      target.textContent = source.value;
+      if (status) { status.textContent = '서식을 표시하지 못해 원문으로 표시했습니다.'; status.hidden = false; }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.markdown-math').forEach(target => {
-      const source = document.getElementById(target.dataset.source);
-      if (!source) return;
-      try { renderSummary(target, source.value || source.textContent); }
-      catch (error) {
-        target.textContent = source.value || source.textContent;
-        const status = target.closest('.summary-card').querySelector('.summary-render-status');
-        if (status) { status.textContent = '서식을 표시하지 못해 원문으로 표시했습니다.'; status.hidden = false; }
-      }
-    });
+    document.querySelectorAll('.markdown-math').forEach(refreshSummary);
   });
+  document.addEventListener('summary:updated', event => refreshSummary(event.target));
 })();

@@ -6,6 +6,7 @@ Gemini로 판서 내용 정리, 요약
 
 import json
 import os
+import re
 
 import requests
 from dotenv import load_dotenv
@@ -23,15 +24,20 @@ SYSTEM_INSTRUCTION = """\
 [내용 규칙]
 1. 문맥상 명백한 인식 오류만 바로잡아. 판서에 없는 내용을 지어내지 마.
 2. 원래 무엇이었는지 확신할 수 없는 부분은 [?]로 표시해.
-3. 판서에 쓰인 내용을 빠뜨리지 말고 정리해. 설명을 덧붙일 때는 판서 내용과 구분되게 써.
-4. 한국어로 답해.
+3. 판서에서 읽을 수 있는 내용을 정리해. 정리된 필기와 핵심 요약에는 판서 내용만 써.
+4. OCR이나 요약의 처리 절차, 시도한 방법, 인식 실패, 표기 방침은 필기와 요약에 넣지 마.
+5. 한국어로 답해.
 
 [출력 형식]
-아래 두 부분만 출력해.
+아래 두 부분을 출력해.
 ## 정리된 필기
 (판서 내용을 읽기 좋게 정리. 소제목, 목록, 표를 자유롭게 사용)
 ## 핵심 요약
-(3~5개의 짧은 목록)
+(판서의 핵심 개념과 내용만 짧은 목록으로 정리)
+
+OCR 입력이 불완전해 사용자에게 알려야 할 점이 있으면 마지막에 `## 처리 안내`를 별도 줄에 쓰고,
+그 아래에 입력의 한계를 짧은 일반 텍스트로 써. 안내가 없으면 이 부분을 생략해.
+실제로 주어지지 않은 처리 단계나 재시도 여부는 추측하지 마.
 
 [표기 규칙]
 1. 전체는 마크다운(Markdown)으로 작성해. 표가 필요하면 마크다운 표를 써.
@@ -95,17 +101,19 @@ def summarize(ocr_text):
     parts = (candidate.get("content") or {}).get("parts") or []
     text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
 
+    sections = re.split(r"(?m)^#{1,6}[ \t]+처리 안내[ \t]*\r?$", text, maxsplit=1)
+    text = sections[0].strip()
     if not text:
         reason = (data.get("promptFeedback") or {}).get("blockReason") or finish_reason
         raise GeminiError(f"답변을 받지 못했습니다. (사유: {reason})")
 
-    notice = None
+    notices = [section.strip() for section in sections[1:] if section.strip()]
     if finish_reason == "MAX_TOKENS":
-        notice = "답변이 길어서 중간에 잘렸습니다."
+        notices.append("답변이 길어서 중간에 잘렸습니다.")
     elif finish_reason and finish_reason != "STOP":
-        notice = f"답변이 중간에 멈췄습니다. (사유: {finish_reason})"
+        notices.append(f"답변이 중간에 멈췄습니다. (사유: {finish_reason})")
 
-    return {"text": text, "notice": notice, "model": model}
+    return {"text": text, "notice": "\n".join(notices) or None, "model": model}
 
 
 def error_message(res, model):
