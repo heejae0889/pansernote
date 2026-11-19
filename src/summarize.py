@@ -15,23 +15,35 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-TIMEOUT = 90
+CONNECT_TIMEOUT = 5
+READ_TIMEOUT = 30
 
 SYSTEM_INSTRUCTION = """\
 너는 대학 강의 판서를 정리해 주는 조교야.
 입력은 칠판 사진을 OCR한 텍스트라서 오타, 깨진 기호, 순서가 뒤섞인 줄이 있을 수 있어.
 
 [내용 규칙]
-1. 문맥상 명백한 인식 오류만 바로잡아. 판서에 없는 내용을 지어내지 마.
-2. 원래 무엇이었는지 확신할 수 없는 부분은 [?]로 표시해.
-3. 판서에서 읽을 수 있는 내용을 정리해. 정리된 필기와 핵심 요약에는 판서 내용만 써.
-4. OCR이나 요약의 처리 절차, 시도한 방법, 인식 실패, 표기 방침은 필기와 요약에 넣지 마.
-5. 한국어로 답해.
+1. 읽을 수 있는 판서 문장과 관련 용어를 주제별로 묶고, 같은 내용을 합쳐 복습할 수 있는 필기로 정리해.
+2. 판서에서 관계가 드러나는 개념은 무엇이고 어떻게 연결되는지 자연스러운 문장으로 풀어 써.
+   함께 등장했다는 이유만으로 판서에서 그 관계를 설명했다고 단정하지 마.
+3. 주제나 용어가 분명하면 정리된 필기 아래 `### 관련 개념 풀이`에 그 용어의 일반적인 뜻이나 바로 연결되는 개념을 짧게 설명해.
+   판서에 직접 쓰인 내용처럼 표현하지 말고, 읽힌 용어에서 출발해 설명해. 주제가 불분명하면 이 소제목을 생략해.
+4. 명백한 오타와 띄어쓰기만 바로잡아. 판서의 수치, 단위, 기호, 수식, 표의 셀 위치가 불확실하면 추측하지 마.
+   의미가 통하는 문장에 빈 부분이 있으면 필요한 곳에만 [?]를 쓰고, 의미 없는 문자 조각은 본문에서 빼.
+5. 핵심 요약에는 판서에서 확인되는 개념이나 관계만 담아. 관련 개념 풀이에서 보충한 내용은 요약에 넣지 마.
+   확인되는 내용이 한 가지면 한 줄만 써.
+   확인되는 내용이 없으면 빈 필기를 길게 늘리지 말고, 입력이 부족하다는 안내만 아래 규칙대로 남겨.
+6. OCR이나 요약 처리 절차, 시도한 방법, 인식 실패, 표기 방침은 필기와 핵심 요약에 넣지 마.
+7. 한국어로 답해.
+
+예를 들어 입력에 `표본화`, `샘플링 주파수`, `q1?`만 있다면 확인된 두 용어를 정리한 뒤,
+관련 개념 풀이에서 샘플링 주파수가 1초에 신호를 몇 번 측정하는지를 나타낸다고 설명해.
+판서에 나온 주파수 값이나 `q1?`의 뜻은 추측하지 마.
 
 [출력 형식]
-아래 두 부분을 출력해.
+정리할 수 있는 내용이 있으면 아래 두 부분을 출력해.
 ## 정리된 필기
-(판서 내용을 읽기 좋게 정리. 소제목, 목록, 표를 자유롭게 사용)
+(판서 내용을 읽기 좋게 정리. 필요하면 관련 개념 풀이를 소제목으로 덧붙여)
 ## 핵심 요약
 (판서의 핵심 개념과 내용만 짧은 목록으로 정리)
 
@@ -58,6 +70,14 @@ class GeminiError(Exception):
     pass
 
 
+class GeminiTimeout(GeminiError):
+    pass
+
+
+class GeminiUnavailable(GeminiError):
+    pass
+
+
 def summarize(ocr_text):
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     model = os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_MODEL
@@ -67,7 +87,7 @@ def summarize(ocr_text):
     body = {
         "system_instruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [
-            {"role": "user", "parts": [{"text": "다음은 판서 사진을 OCR한 결과야. 정리해 줘.\n\n" + ocr_text}]}
+            {"role": "user", "parts": [{"text": "다음 판서 텍스트에서 확인할 수 있는 내용을 복습용 필기로 정리해 줘.\n\n" + ocr_text}]}
         ],
     }
     # thinkingLevel은 gemini-3 모델만 됨 (minimal로 하면 지시를 잘 안 따라서 low로 함)
@@ -79,15 +99,18 @@ def summarize(ocr_text):
             API_URL.format(model=model),
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
             json=body,
-            timeout=TIMEOUT,
+            timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
         )
-    except requests.Timeout:
-        raise GeminiError("Gemini 응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.")
+    except requests.Timeout as error:
+        raise GeminiTimeout("Gemini 응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.") from error
     except requests.RequestException:
         raise GeminiError("Gemini에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.")
 
     if not res.ok:
-        raise GeminiError(error_message(res, model))
+        message = error_message(res, model)
+        if res.status_code == 503:
+            raise GeminiUnavailable(message)
+        raise GeminiError(message)
 
     try:
         data = res.json()
@@ -103,11 +126,11 @@ def summarize(ocr_text):
 
     sections = re.split(r"(?m)^#{1,6}[ \t]+처리 안내[ \t]*\r?$", text, maxsplit=1)
     text = sections[0].strip()
-    if not text:
+    notices = [section.strip() for section in sections[1:] if section.strip()]
+    if not text and not notices:
         reason = (data.get("promptFeedback") or {}).get("blockReason") or finish_reason
         raise GeminiError(f"답변을 받지 못했습니다. (사유: {reason})")
 
-    notices = [section.strip() for section in sections[1:] if section.strip()]
     if finish_reason == "MAX_TOKENS":
         notices.append("답변이 길어서 중간에 잘렸습니다.")
     elif finish_reason and finish_reason != "STOP":

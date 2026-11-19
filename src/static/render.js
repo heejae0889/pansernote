@@ -93,11 +93,12 @@
 
   function refreshSummary(target) {
     const source = document.getElementById(target.dataset.source);
-    if (!source?.value) return;
+    if (!source) return;
     const status = target.closest('.summary-card').querySelector('.summary-render-status');
     if (status) status.hidden = true;
     target.classList.remove('is-rendered');
     target.textContent = source.value;
+    if (!source.value) return;
     try { renderSummary(target, source.value); }
     catch {
       target.textContent = source.value;

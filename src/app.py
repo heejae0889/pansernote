@@ -7,7 +7,7 @@
 import json
 import os
 import uuid
-from time import perf_counter
+from time import perf_counter, sleep
 
 import cv2
 import numpy as np
@@ -15,7 +15,7 @@ from flask import Flask, jsonify, render_template, request, url_for
 
 from ocr import run_ocr
 from preprocess import detect_board, preprocess_image, resize_max
-from summarize import GeminiError, summarize
+from summarize import GeminiError, GeminiTimeout, GeminiUnavailable, summarize
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
@@ -136,7 +136,7 @@ def upload():
         photos.append(dict(result, filename=file.filename))
         statuses.append(status)
     status = 200 if any(code == 200 for code in statuses) else max(statuses)
-    return render_template("index.html", photos=photos), status
+    return render_template("index.html", photos=photos, result_batch=uuid.uuid4().hex), status
 
 
 def process_file(file, *, adjustment=None):
@@ -154,9 +154,18 @@ def process_file(file, *, adjustment=None):
     # ------------------------------------------------------------------------------------------------------------------------------전처리
     preprocessing_started = perf_counter()
     try:
-        # False means the user declined manual adjustment after detection failed.
-        corners = None if adjustment is False else adjustment
-        processed = preprocess_image(image, perspective=adjustment is None, corners=corners)
+        board_corners = None
+        perspective_status = "원근 보정 미적용"
+        if adjustment is False:
+            processed = preprocess_image(image)
+        else:
+            processed, details = preprocess_image(
+                image, perspective=adjustment is None, corners=adjustment, return_details=True
+            )
+            if details["perspective_applied"]:
+                board_corners = details["perspective"]["corners"]
+                perspective_status = "자동 원근 보정 적용" if adjustment is None else "수동 원근 보정 적용"
+            del details
     except (TypeError, ValueError):
         if adjustment is not None and adjustment is not False:
             return {"error": "칠판 모서리가 올바르지 않습니다. 사진을 다시 선택해 주세요."}, 400
@@ -179,20 +188,28 @@ def process_file(file, *, adjustment=None):
         return {"error": "사진을 저장하지 못했습니다. 다시 시도해 주세요."}, 500
 
     # ------------------------------------------------------------------------------------------------------------------------------문자 인식
-    # 보정한 이미지에서 문자를 추출합니다.
-    results = []
+    ocr_notice = None
     ocr_seconds = None
     ocr_started = perf_counter()
     try:
-        results.append(make_result("추출한 글자", run_ocr(processed)))
+        lines = run_ocr(processed)
     except Exception as e:
         app.logger.exception("OCR 실패")
         return dict(
             error=f"OCR 처리 중 오류가 났습니다: {e}",
+            perspective_status=perspective_status,
             original_url=url_for("static", filename=f"uploads/{original_file}"),
             processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         ), 500
 
+    if board_corners is not None:
+        try:
+            full_image = preprocess_image(image)
+            lines.extend(run_ocr(full_image, outside_board=board_corners if lines else None))
+        except Exception:
+            app.logger.exception("보정 영역 밖 글자 추출 실패")
+            ocr_notice = "보정 영역 밖 글자를 추가로 추출하지 못했습니다."
+    results = [make_result("추출한 글자", lines)]
     ocr_seconds = perf_counter()-ocr_started
 
     # ------------------------------------------------------------------------------------------------------------------------------정리·요약
@@ -206,18 +223,25 @@ def process_file(file, *, adjustment=None):
         else:
             summary_started = perf_counter()
             try:
-                summary = summarize(ocr_text)
+                try:
+                    summary = summarize(ocr_text)
+                except (GeminiTimeout, GeminiUnavailable) as error:
+                    if isinstance(error, GeminiUnavailable):
+                        sleep(1)
+                    summary = summarize(ocr_text)
             except Exception as e:  # 요약이 실패해도 OCR 결과는 보여줌
                 summary_error = str(e)
             summary_seconds = perf_counter()-summary_started
 
     return dict(
         timings={"preprocess": preprocessing_seconds, "ocr": ocr_seconds, "summary": summary_seconds},
+        perspective_status=perspective_status,
         original_url=url_for("static", filename=f"uploads/{original_file}"),
         processed_url=url_for("static", filename=f"uploads/{processed_file}"),
         results=results,
         summary=summary,
         summary_error=summary_error,
+        ocr_notice=ocr_notice,
         summary_label=summary_label,
     ), 200
 
