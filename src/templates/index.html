@@ -10,6 +10,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.2/dist/html2pdf.bundle.min.js"></script>
   <script defer src="{{ url_for('static', filename='pdf-export.js') }}"></script>
   {% endif %}
+  <script defer src="{{ url_for('static', filename='board-adjustment.js') }}"></script>
   {% if photos|default([])|selectattr('summary')|list %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.js"></script>
@@ -24,7 +25,7 @@
     <div class="workspace">
       <section class="upload-card" aria-labelledby="upload-title">
         <div class="section-heading"><span class="step" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3h10l4 4v14H5zM14 3v5h5M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><h2 id="upload-title">사진 업로드</h2></div>
-        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
+        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form" data-board-detection="{{ url_for('board_detection') }}">
           <div class="file-zone">
             <span class="upload-icon"><svg viewBox="0 0 96 80" fill="none" aria-hidden="true"><path d="m31 60-7 14m41-14 7 14M48 60v12" stroke="#8399b7" stroke-width="4" stroke-linecap="round"/><rect class="board-frame" x="8" y="8" width="80" height="52" rx="7" fill="#e5edf8" stroke="#8da4c3" stroke-width="2"/><rect x="13" y="13" width="70" height="42" rx="3" fill="#294563"/><g stroke="#e4efff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m23 27 6 6 9-13M47 24h24M47 32h17M23 44h20M50 44h10"/></g><path d="M9 60h78" stroke="#a3b4cd" stroke-width="4" stroke-linecap="round"/><path d="m68 48 13-16 5 4-13 16-7 3z" fill="#edf3fb" stroke="#8da4c3" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
             <strong>판서 또는 필기 사진 업로드</strong>
@@ -38,6 +39,8 @@
           <p class="pipeline">이미지 전처리 → 글자 추출 → Gemini 요약</p>
           <button type="submit" id="btn">글자 추출하고 요약하기 <span aria-hidden="true">→</span></button>
           <p id="processing-status" class="processing-status" role="status" hidden>이미지 전처리, 글자 추출, Gemini 요약을 순서대로 진행합니다. 잠시 기다려 주세요.</p>
+          <p id="board-detection-error" class="error" role="alert" hidden></p>
+          <input type="hidden" id="board-adjustments" name="board_adjustments" value="null">
           <p class="hint">요약을 위해 추출된 텍스트가 Google Gemini로 전송됩니다.</p>
         </form>
         {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
@@ -89,12 +92,36 @@
     {% endwith %}
     {% endfor %}
   </main>
+  <dialog id="board-confirm" class="board-dialog" aria-labelledby="board-question">
+    <h2 id="board-question">칠판 인식에 실패했습니다. 수동 조정하시겠습니까?</h2>
+    <p class="board-filename"></p>
+    <form method="dialog" class="board-actions">
+      <button type="submit" value="skip" autofocus>아니요</button>
+      <button type="submit" value="adjust">예</button>
+    </form>
+  </dialog>
+  <dialog id="board-editor" class="board-dialog" aria-labelledby="board-editor-title">
+    <h2 id="board-editor-title">칠판 영역 조정</h2>
+    <p class="board-filename"></p>
+    <p>네 모서리를 칠판 테두리에 맞춰 주세요. 방향키로도 움직일 수 있어요.</p>
+    <div class="board-preview">
+      <img alt="조정할 원본 사진">
+      <canvas aria-hidden="true"></canvas>
+      <button type="button" class="board-corner" aria-label="왼쪽 위 모서리"></button>
+      <button type="button" class="board-corner" aria-label="오른쪽 위 모서리"></button>
+      <button type="button" class="board-corner" aria-label="오른쪽 아래 모서리"></button>
+      <button type="button" class="board-corner" aria-label="왼쪽 아래 모서리"></button>
+    </div>
+    <p class="board-editor-error error" role="alert" hidden></p>
+    <form method="dialog" class="board-actions">
+      <button type="submit" value="skip">보정 건너뛰기</button>
+      <button type="submit" value="apply">적용</button>
+    </form>
+  </dialog>
   <footer>판서노트</footer>
   <script>
     const fileInput = document.getElementById('image');
     const cameraInput = document.getElementById('camera');
-    const submitButton = document.getElementById('btn');
-    const submitLabel = submitButton.innerHTML;
     function updateSelection(event) {
       const otherInput = event.target === fileInput ? cameraInput : fileInput;
       const selectedInput = event.target.files.length ? event.target : (otherInput.files.length ? otherInput : fileInput);
@@ -112,20 +139,6 @@
     }
     fileInput.addEventListener('change', updateSelection);
     cameraInput.addEventListener('change', updateSelection);
-    document.getElementById('upload-form').addEventListener('submit', (event) => {
-      if (submitButton.disabled) {
-        event.preventDefault();
-        return;
-      }
-      submitButton.textContent = '처리 중…';
-      submitButton.disabled = true;
-      document.getElementById('processing-status').hidden = false;
-    });
-    window.addEventListener('pageshow', () => {
-      submitButton.disabled = false;
-      submitButton.innerHTML = submitLabel;
-      document.getElementById('processing-status').hidden = true;
-    });
   </script>
 </body>
 </html>
