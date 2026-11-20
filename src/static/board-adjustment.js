@@ -6,7 +6,9 @@
   const submitLabel = submit.innerHTML;
   const status = document.getElementById('processing-status');
   const uploadError = document.getElementById('board-detection-error');
-  const adjustments = document.getElementById('board-adjustments');
+  const history = document.getElementById('result-history');
+  const bookmarks = document.getElementById('result-bookmarks');
+  const pages = document.getElementById('result-pages');
   const confirm = document.getElementById('board-confirm');
   const editor = document.getElementById('board-editor');
   const preview = editor.querySelector('.board-preview');
@@ -115,9 +117,27 @@
     submit.disabled = false;
     submit.innerHTML = submitLabel;
     status.hidden = true;
-    adjustments.value = 'null';
   }
   window.addEventListener('pageshow', reset);
+
+  function addBookmark(page) {
+    const number = bookmarks.children.length + 1;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = number;
+    button.setAttribute('aria-label', `처리 결과 ${number}페이지`);
+    page.id = `result-page-${number}`;
+    button.setAttribute('aria-controls', page.id);
+    button.addEventListener('click', () => {
+      for (const tab of bookmarks.children) tab.setAttribute('aria-pressed', String(tab === button));
+      for (const entry of pages.children) entry.hidden = entry !== page;
+    });
+    bookmarks.append(button);
+    history.hidden = false;
+    button.click();
+  }
+
+  for (const page of pages.children) addBookmark(page);
 
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -127,6 +147,14 @@
     uploadError.hidden = true;
     submit.disabled = true;
     submit.textContent = '칠판 테두리 확인 중…';
+    const page = document.createElement('div');
+    const loading = document.createElement('p');
+    loading.className = 'result-loading';
+    loading.innerHTML = '<span class="sr-only">처리 중</span><span aria-hidden="true">. . .</span>';
+    page.append(loading);
+    page.setAttribute('aria-busy', 'true');
+    pages.append(page);
+    addBookmark(page);
     try {
       const response = await fetch(form.dataset.boardDetection, { method: 'POST', body: data });
       const result = await response.json();
@@ -137,14 +165,32 @@
       if (currentFiles.length !== files.length || currentFiles.some((file, index) => file !== files[index])) {
         throw new Error('사진 선택이 변경됐습니다. 다시 실행해 주세요.');
       }
-      adjustments.value = JSON.stringify(selections);
+      data.set('board_adjustments', JSON.stringify(selections));
       submit.textContent = '처리 중…';
       status.hidden = false;
-      form.submit();
+      const upload = await fetch(form.action, { method: 'POST', body: data });
+      const resultPage = new DOMParser().parseFromString(await upload.text(), 'text/html');
+      const received = resultPage.querySelector('[data-result-page]');
+      if (!received) {
+        throw new Error(resultPage.querySelector('.upload-card > .error')?.textContent.trim()
+          || '처리 결과를 불러오지 못했습니다. 다시 시도해 주세요.');
+      }
+      page.replaceChildren(...received.childNodes);
+      page.querySelectorAll('.markdown-math').forEach(target => {
+        target.dispatchEvent(new Event('summary:updated', { bubbles: true }));
+      });
     } catch (error) {
-      reset();
       uploadError.textContent = error instanceof SyntaxError ? '칠판을 확인하지 못했습니다. 다시 시도해 주세요.' : error.message;
       uploadError.hidden = false;
+      const message = document.createElement('p');
+      message.className = 'error';
+      message.setAttribute('role', 'alert');
+      message.textContent = uploadError.textContent;
+      page.append(message);
+    } finally {
+      loading.remove();
+      page.removeAttribute('aria-busy');
+      reset();
     }
   });
 })();

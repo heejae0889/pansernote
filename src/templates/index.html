@@ -11,13 +11,12 @@
   <script defer src="{{ url_for('static', filename='pdf-export.js') }}"></script>
   {% endif %}
   <script defer src="{{ url_for('static', filename='board-adjustment.js') }}"></script>
-  {% if photos|default([])|selectattr('summary')|list %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/marked@16.4.2/lib/marked.umd.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.3.1/dist/purify.min.js"></script>
   <script defer src="{{ url_for('static', filename='render.js') }}"></script>
-  {% endif %}
+  <script defer src="{{ url_for('static', filename='ocr-edit.js') }}"></script>
 </head>
 <body>
   <header class="site-header"><a class="brand" href="/"><svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M7 5h17v23H7z" stroke="currentColor" stroke-width="1.8"/><path d="M4 10h6M4 16h6M4 22h6M14 11h6M14 16h6M14 21h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>판서노트<span>Pansernote</span></a></header>
@@ -27,7 +26,12 @@
         <div class="section-heading"><span class="step" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 3h10l4 4v14H5zM14 3v5h5M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></span><h2 id="upload-title">사진 업로드</h2></div>
         <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form" data-board-detection="{{ url_for('board_detection') }}">
           <div class="file-zone">
-            <span class="upload-icon"><svg viewBox="0 0 96 80" fill="none" aria-hidden="true"><path d="m31 60-7 14m41-14 7 14M48 60v12" stroke="#8399b7" stroke-width="4" stroke-linecap="round"/><rect class="board-frame" x="8" y="8" width="80" height="52" rx="7" fill="#e5edf8" stroke="#8da4c3" stroke-width="2"/><rect x="13" y="13" width="70" height="42" rx="3" fill="#294563"/><g stroke="#e4efff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m23 27 6 6 9-13M47 24h24M47 32h17M23 44h20M50 44h10"/></g><path d="M9 60h78" stroke="#a3b4cd" stroke-width="4" stroke-linecap="round"/><path d="m68 48 13-16 5 4-13 16-7 3z" fill="#edf3fb" stroke="#8da4c3" stroke-width="1.5" stroke-linejoin="round"/></svg></span>
+            <span class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 72 52" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <rect class="board-frame" x="3" y="3" width="66" height="46" rx="4"/>
+                <path d="M17 18h38M17 26h38M17 34h24"/>
+              </svg>
+            </span>
             <strong>판서 또는 필기 사진 업로드</strong>
             <span class="file-caption">JPG · JPEG · PNG / 최대 5장 · 장당 10MB</span>
             <div class="upload-actions">
@@ -38,10 +42,12 @@
           </div>
           <p class="pipeline">이미지 전처리 → 글자 추출 → Gemini 요약</p>
           <button type="submit" id="btn">글자 추출하고 요약하기 <span aria-hidden="true">→</span></button>
-          <p id="processing-status" class="processing-status" role="status" hidden>이미지 전처리, 글자 추출, Gemini 요약을 순서대로 진행합니다. 잠시 기다려 주세요.</p>
-          <p id="board-detection-error" class="error" role="alert" hidden></p>
+          <div class="upload-notices">
+            <p id="processing-status" class="hint" role="status" hidden>이미지 전처리, 글자 추출, Gemini 요약을 순서대로 진행합니다. 잠시 기다려 주세요.</p>
+            <p id="board-detection-error" class="error" role="alert" hidden></p>
+            <p class="hint">요약을 위해 추출된 텍스트가 Google Gemini로 전송됩니다.</p>
+          </div>
           <input type="hidden" id="board-adjustments" name="board_adjustments" value="null">
-          <p class="hint">요약을 위해 추출된 텍스트가 Google Gemini로 전송됩니다.</p>
         </form>
         {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
       </section>
@@ -49,15 +55,19 @@
         <section aria-labelledby="features-title"><h2 id="features-title">제공하는 기능</h2>
           <ul class="features">
             <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4m8 0h4v4M4 16v4h4m8 0h4v-4M8 9l8-2 1 9-9 1z"/></svg></span><div><h3>이미지 전처리</h3><p>사진을 자동 보정하고 원본과 보정 사진을 함께 보여줍니다.</p></div></li>
-            <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M12 5v14M8 19h8M4 10V5m16 5V5"/></svg></span><div><h3>글자 추출</h3><p>보정된 사진에서 판서 내용을 추출합니다.</p></div></li>
+            <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M12 5v14M8 19h8M4 10V5m16 5V5"/></svg></span><div><h3>글자 추출</h3><p>보정한 칠판을 읽고, 잘려 나간 영역도 원본에서 확인합니다.</p></div></li>
             <li><span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4"/></svg></span><div><h3>Gemini 정리·요약</h3><p>추출한 글자를 바탕으로 필기와 핵심 내용을 정리합니다.</p></div></li>
           </ul>
         </section>
         <section class="guidelines" aria-labelledby="guide-title"><h2 id="guide-title">업로드 기준</h2><ul><li>JPG, JPEG, PNG 이미지 · 장당 최대 10MB</li><li>한 번에 최대 5장 업로드</li><li>필기 영역의 테두리가 뚜렷하게 보이는 사진을 권장합니다.</li></ul></section>
       </aside>
     </div>
+    <div id="result-history" class="result-history"{% if not photos %} hidden{% endif %}>
+    <nav id="result-bookmarks" class="result-bookmarks" aria-label="처리 결과 페이지"></nav>
+    <div id="result-pages">
+    {% if photos %}<div data-result-page>{% endif %}
     {% for photo in photos|default([]) %}
-    {% set photo_index = loop.index %}
+    {% set photo_index = result_batch|default('result') ~ '-' ~ loop.index %}
     {% with original_url=photo.get('original_url'), processed_url=photo.get('processed_url'), timings=photo.get('timings'), results=photo.get('results', []), summary=photo.get('summary'), summary_error=photo.get('summary_error'), error=photo.get('error') %}
     <section class="results-section" aria-labelledby="result-title-{{ photo_index }}">
       <div class="result-heading"><div><h2 id="result-title-{{ photo_index }}">처리 결과</h2><p class="hint">{{ photo.filename }}</p></div>
@@ -69,28 +79,38 @@
       </div>
       {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
       {% if original_url %}
-      <div class="image-grid"><figure><figcaption>원본 이미지</figcaption><img src="{{ original_url }}" alt="업로드한 원본 사진"></figure><figure><figcaption>보정 이미지</figcaption><img src="{{ processed_url }}" alt="보정된 사진"></figure></div>
+      <div class="image-grid"><figure><figcaption>원본 이미지</figcaption><img src="{{ original_url }}" alt="업로드한 원본 사진"></figure><figure><figcaption>보정 이미지{% if photo.perspective_status %} · {{ photo.perspective_status }}{% endif %}</figcaption><img src="{{ processed_url }}" alt="보정된 사진"></figure></div>
       {% if results is defined %}
       <div class="text-grid">{% for r in results %}<article class="text-card"><div class="text-heading"><h3>{{ r.label }}</h3><span>{{ r.count }}줄 인식</span></div>
-        {% if r.lines %}<label class="sr-only" for="text-{{ photo_index }}-{{ loop.index }}">{{ r.label }} 추출 텍스트</label><textarea id="text-{{ photo_index }}-{{ loop.index }}" rows="10" readonly>{{ r.text }}</textarea>
+        <form class="ocr-edit-form" action="{{ url_for('summarize_edited') }}" method="post">
+          <label class="sr-only" for="text-{{ photo_index }}-{{ loop.index }}">추출한 글자 수정</label>
+          <textarea id="text-{{ photo_index }}-{{ loop.index }}" name="text" rows="10" required placeholder="빠지거나 잘못 인식된 판서 내용을 직접 입력할 수 있어요.">{{ r.text }}</textarea>
+          <button type="submit">수정한 글자로 다시 요약</button>
+        </form>
+        {% if r.lines %}
         <details><summary>줄별 인식 결과 · 평균 신뢰도 {{ r.avg_score }}</summary><p class="hint">신뢰도는 인식 모델의 추정값으로, 실제 정확도와 다를 수 있습니다.</p><div class="table-scroll"><table><thead><tr><th scope="col">줄</th><th scope="col">텍스트</th><th scope="col">신뢰도</th></tr></thead><tbody>{% for line in r.lines %}<tr><td>{{ loop.index }}</td><td>{{ line.text }}</td><td>{{ line.score }}</td></tr>{% endfor %}</tbody></table></div></details>
-        {% else %}<p class="empty-state">인식된 글자가 없습니다. 더 선명한 사진으로 시도해 주세요.</p>{% endif %}
+        {% else %}<p class="empty-state">인식된 글자가 없습니다.</p>{% endif %}
       </article>{% endfor %}</div>
       {% endif %}
       <article class="summary-card" aria-labelledby="summary-title-{{ photo_index }}">
-        <div class="text-heading"><h3 id="summary-title-{{ photo_index }}">Gemini 정리·요약</h3>{% if timings and timings.summary is not none %}<span>{{ '%.2f'|format(timings.summary) }}초</span>{% endif %}</div>
-        {% if summary %}
-        <div class="summary-text markdown-math" data-source="summary-raw-{{ photo_index }}">{{ summary.text }}</div>
-        <textarea id="summary-raw-{{ photo_index }}" hidden>{{ summary.text }}</textarea>
-        <p class="hint summary-render-status" role="status" hidden></p>
-        {% if summary.notice %}<p class="hint" role="status">{{ summary.notice }}</p>{% endif %}
-        {% elif summary_error %}<p class="error" role="alert">{{ summary_error }}</p>
-        {% elif not error %}<p class="hint">글자 추출에 성공하면 요약 결과가 표시됩니다.</p>{% endif %}
+        <div class="text-heading"><h3 id="summary-title-{{ photo_index }}">Gemini 정리·요약</h3></div>
+        <div class="summary-text markdown-math" data-source="summary-raw-{{ photo_index }}" aria-live="polite"{% if not summary or not summary.text %} hidden{% endif %}>{{ summary.text if summary else '' }}</div>
+        <textarea id="summary-raw-{{ photo_index }}" hidden>{{ summary.text if summary else '' }}</textarea>
+        <div class="summary-notices">
+          {% if photo.ocr_notice %}<p class="hint" role="status">{{ photo.ocr_notice }}</p>{% endif %}
+          <p class="hint summary-render-status" role="status" hidden></p>
+          <p class="hint summary-notice" role="status"{% if not (summary and summary.notice) %} hidden{% endif %}>{{ summary.notice if summary and summary.notice else '' }}</p>
+          <p class="hint summary-error" role="alert"{% if not summary_error %} hidden{% endif %}>{{ summary_error or '' }}</p>
+          <p class="hint summary-time"{% if not timings or timings.summary is none %} hidden{% endif %}>{% if timings and timings.summary is not none %}요약 처리 시간 {{ '%.2f'|format(timings.summary) }}초{% endif %}</p>
+        </div>
       </article>
       {% endif %}
     </section>
     {% endwith %}
     {% endfor %}
+    {% if photos %}</div>{% endif %}
+    </div>
+    </div>
   </main>
   <dialog id="board-confirm" class="board-dialog" aria-labelledby="board-question">
     <h2 id="board-question">칠판 인식에 실패했습니다. 수동 조정하시겠습니까?</h2>
@@ -103,7 +123,7 @@
   <dialog id="board-editor" class="board-dialog" aria-labelledby="board-editor-title">
     <h2 id="board-editor-title">칠판 영역 조정</h2>
     <p class="board-filename"></p>
-    <p>네 모서리를 칠판 테두리에 맞춰 주세요. 방향키로도 움직일 수 있어요.</p>
+    <p>네 점을 실제로 직사각형인 칠판 테두리의 모서리에 맞춰 주세요. 테두리가 사진 밖으로 잘렸다면 네 모서리가 보이도록 다시 찍어 주세요. 방향키로도 움직일 수 있어요.</p>
     <div class="board-preview">
       <img alt="조정할 원본 사진">
       <canvas aria-hidden="true"></canvas>
@@ -134,7 +154,8 @@
       const files = Array.from(selectedInput.files);
       const message = files.length > 5 ? '사진은 최대 5장까지 선택해 주세요.' : files.some(file => file.size > 10 * 1024 * 1024) ? '사진 한 장당 10MB 이하로 선택해 주세요.' : '';
       selectedInput.setCustomValidity(message);
-      document.getElementById('file-status').textContent = files.length ? files.map(file => file.name).join(', ') : '선택한 파일 없음';
+      const filenames = files.map(file => file.name).join(', ');
+      document.getElementById('file-status').textContent = message || (files.length ? `사진 ${files.length}장 선택됨 · ${filenames}` : '선택한 파일 없음');
       if (files.length) selectedInput.reportValidity();
     }
     fileInput.addEventListener('change', updateSelection);
