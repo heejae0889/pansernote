@@ -1,4 +1,4 @@
-/* 처리 결과(원본 사진 + Gemini 요약)를 한 개의 PDF로 저장한다.
+/* 처리 결과(원본·보정 사진 + Gemini 요약)를 한 개의 PDF로 저장한다.
    화면에 이미 그려진 결과(마크다운/수식 렌더링 포함)를 그대로 사용하므로 서버 작업이 필요 없다. */
 (() => {
   'use strict';
@@ -9,8 +9,10 @@
     .pdf-doc .pdf-meta { font-size: 11px; color: #606d83; margin: 0 0 18px; padding-bottom: 10px; border-bottom: 2px solid #365b91; }
     .pdf-doc h2 { font-size: 16px; margin: 4px 0 10px; padding-left: 9px; border-left: 4px solid #365b91; color: #1f3a66; }
     .pdf-doc h3 { font-size: 14px; margin: 14px 0 6px; }
-    .pdf-doc .pdf-photo { text-align: center; }
-    .pdf-doc .pdf-photo img { max-width: 100%; max-height: 520px; border: 1px solid #d5deea; }
+    .pdf-doc .pdf-photos { display: flex; gap: 12px; align-items: flex-start; }
+    .pdf-doc .pdf-photo { flex: 1 1 0; min-width: 0; margin: 0; text-align: center; }
+    .pdf-doc .pdf-photo figcaption { font-size: 12px; font-weight: 700; color: #1f3a66; margin: 0 0 6px; }
+    .pdf-doc .pdf-photo img { max-width: 100%; max-height: 560px; border: 1px solid #d5deea; }
     .pdf-doc .pdf-ocr { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 12px 14px; background: #f5f7fb; border: 1px solid #d5deea; border-radius: 6px; font-family: inherit; font-size: 12.5px; line-height: 1.8; }
     .pdf-doc .pdf-line { white-space: pre-wrap; overflow-wrap: anywhere; }
     .pdf-doc .pdf-note { font-size: 11px; color: #606d83; margin: 0 0 6px; }
@@ -67,20 +69,26 @@
     doc.append(node('h1', '', '판서노트 정리'));
     doc.append(node('p', 'pdf-meta', `${filename} · ${new Date().toLocaleString('ko-KR')}`));
 
-    // 1. 원본 사진
-    doc.append(node('h2', '', '1. 원본 사진'));
-    const photo = node('div', 'pdf-photo');
-    const original = section.querySelector('.image-grid figure img');
-    if (original) {
-      const image = document.createElement('img');
-      image.alt = '원본 사진';
-      image.src = await photoSource(original);
-      try { await image.decode(); } catch (error) { /* 로드 실패 시 아래 캡처에서 처리 */ }
-      photo.append(image);
-    } else {
-      photo.append(node('p', 'pdf-note', '원본 사진이 없습니다.'));
+    // 1. 원본·보정 사진 (왼쪽 원본, 오른쪽 보정)
+    doc.append(node('h2', '', '1. 원본 · 보정 사진'));
+    const photos = node('div', 'pdf-photos');
+    const sources = section.querySelectorAll('.image-grid figure img');
+    const labels = ['원본 이미지', '보정 이미지'];
+    for (let i = 0; i < labels.length; i += 1) {
+      const figure = node('figure', 'pdf-photo');
+      figure.append(node('figcaption', '', labels[i]));
+      if (sources[i] && sources[i].getAttribute('src')) {
+        const image = document.createElement('img');
+        image.alt = labels[i];
+        image.src = await photoSource(sources[i]);
+        try { await image.decode(); } catch (error) { /* 로드 실패 시 아래 캡처에서 처리 */ }
+        figure.append(image);
+      } else {
+        figure.append(node('p', 'pdf-note', '사진이 없습니다.'));
+      }
+      photos.append(figure);
     }
-    doc.append(photo);
+    doc.append(photos);
 
     // 2. Gemini 요약
     doc.append(node('div', 'html2pdf__page-break'));
@@ -114,13 +122,11 @@
       say('PDF 도구를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.');
       return;
     }
-    const savedScrollY = window.scrollY;
     button.disabled = true;
     button.textContent = 'PDF 만드는 중…';
     say('');
     try {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
-      window.scrollTo(0, 0);
       const base = (button.dataset.filename || '판서노트').replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|]/g, '_');
       const doc = await buildDocument(section, button.dataset.filename || '판서노트');
       await window.html2pdf().set({
@@ -135,7 +141,6 @@
       console.error(error);
       say('PDF를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
-      window.scrollTo(0, savedScrollY);
       button.disabled = false;
       button.textContent = label;
     }
