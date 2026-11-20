@@ -170,4 +170,10 @@ def too_large(e):
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5001, debug=True, use_reloader=False, threaded=False)
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=5001,
+        debug=os.getenv("FLASK_DEBUG", "1") == "1",
+        use_reloader=False,
+        threaded=False,
+    )
