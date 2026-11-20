@@ -200,7 +200,9 @@ def detect_board(image):
         horizontal, vertical = _line_groups(segments.reshape(-1, 4), h, w)
         for points in _frame_quads(horizontal, vertical, h, w):
             consider(points, 'frame_lines')
-    if best is None or best[0] < .60:
+    # Prefer manual selection when a partial frame or lines inside the board
+    # produce a weak quadrilateral. Cropping those candidates can cut off text.
+    if best is None or best[0] < .68:
         return None
     score, points, method, supports = best
     points = points/np.array([w/original_w, h/original_h], np.float32)
@@ -242,9 +244,24 @@ def estimate_aspect_ratio(points, image_shape):
     return float(ratio) if np.isfinite(ratio) and .25 <= ratio <= 4 else None
 
 
-def rectify_board(image):
+def rectify_board(image, *, corners=None):
     """Detect and rectify one board, preserving the full image on rejection."""
-    detection = detect_board(image)
+    if corners is None:
+        detection = detect_board(image)
+    else:
+        # Points are normalized to the image and ordered TL, TR, BR, BL.
+        points = np.asarray(corners, dtype=np.float32)
+        if (points.shape != (4, 2) or not np.isfinite(points).all()
+                or np.any(points < 0) or np.any(points > 1)):
+            raise ValueError('corners must be four normalized coordinate pairs')
+        height, width = image.shape[:2]
+        points = points * np.float32([width - 1, height - 1])
+        edges = np.roll(points, -1, axis=0) - points
+        next_edges = np.roll(edges, -1, axis=0)
+        turns = edges[:, 0] * next_edges[:, 1] - edges[:, 1] * next_edges[:, 0]
+        if np.any(turns <= 0) or cv2.contourArea(points) < 4:
+            raise ValueError('corners must form a clockwise convex quadrilateral')
+        detection = {'corners': points.tolist(), 'method': 'manual'}
     if detection is None:
         return image.copy(), {'requested': True, 'applied': False, 'reason': 'No supported board quadrilateral found'}
     points = np.float32(detection['corners'])
@@ -271,8 +288,8 @@ def rectify_board(image):
     return warped, details
 
 
-def correct_perspective(image, *, return_details=False):
-    corrected, details = rectify_board(image)
+def correct_perspective(image, *, corners=None, return_details=False):
+    corrected, details = rectify_board(image, corners=corners)
     if return_details:
         return corrected, details['applied'], details
     return corrected, details['applied']
@@ -317,7 +334,7 @@ def deskew(image):
     return cv2.warpAffine(image, matrix, (nw, nh), borderValue=border), angle
 
 
-def preprocess_image(image, *, perspective=False, correct_skew=False,
+def preprocess_image(image, *, perspective=False, corners=None, correct_skew=False,
                      max_side=MAX_SIDE, background="auto", variant="conservative",
                      return_details=False):
     """Prepare OCR input without cropping/rotating by default.
@@ -333,9 +350,10 @@ def preprocess_image(image, *, perspective=False, correct_skew=False,
     if variant not in ("conservative", "enhanced", "gray", "binary"):
         raise ValueError("variant must be conservative, enhanced, gray or binary")
     resized = resize_max(image, max_side)
-    perspective_info = {"requested": bool(perspective), "applied": False}
-    if perspective:
-        geometry, applied, perspective_info = correct_perspective(resized, return_details=True)
+    perspective_info = {"requested": False, "applied": False}
+    if perspective or corners is not None:
+        geometry, applied, perspective_info = correct_perspective(
+            resized, corners=corners, return_details=True)
     else:
         geometry, applied = resized, False
     geometry, angle = deskew(geometry) if correct_skew else (geometry, 0.0)
