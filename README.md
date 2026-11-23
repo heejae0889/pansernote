@@ -44,6 +44,16 @@ docker compose up --build --detach --wait
 docker compose ps
 ```
 
+macOS·Linux에서는 다음을 실행합니다.
+
+```bash
+[ -f .env ] || cp .env.example .env
+docker compose up --build --detach --wait
+docker compose ps
+```
+
+> PaddlePaddle은 ARM용 Linux 패키지를 제공하지 않아 `linux/amd64` 이미지로 빌드합니다. Apple Silicon Mac에서는 에뮬레이션으로 실행되므로 처리 속도가 조금 느릴 수 있습니다.
+
 `docker compose ps`에서 `pansernote`의 상태가 `healthy`로 표시되면 브라우저에서 http://localhost:5001 에 접속합니다. 시작에 실패하면 `docker compose logs --tail 100 pansernote`로 로그를 확인합니다.
 
 ```powershell
