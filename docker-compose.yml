@@ -1,5 +1,7 @@
 services:
   pansernote:
+    # PaddlePaddle은 ARM용 Linux 패키지가 없어서 Mac(Apple Silicon)에서도 amd64로 빌드
+    platform: linux/amd64
     build:
       context: .
     environment:
