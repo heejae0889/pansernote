@@ -1,6 +1,6 @@
 ﻿# 판서노트
 
-판서 사진을 OpenCV로 전처리하고 PaddleOCR로 문자를 추출하는 Flask 웹 프로그램입니다.
+판서 사진을 OpenCV로 전처리하고 PaddleOCR로 문자를 추출한 뒤, Gemini로 정리·요약하는 Flask 웹 프로그램입니다.
 
 ## 주요 개선 사항
 
@@ -11,6 +11,7 @@
 - **Gemini 정리·요약** — 읽힌 판서를 주제별로 정리하고, 주제가 분명하면 관련 개념 풀이를 덧붙입니다. 핵심 요약에는 판서에서 확인된 내용만 담고, 처리 안내는 구분선 아래에 작은 회색 글씨로 표시합니다.
 - **Gemini 오류 시 자동 재시도** — 업로드 직후 자동 요약이 시간 초과되거나 `503` 오류가 발생하면 한 번 더 요청합니다. 재시도도 실패하면 안내를 표시하며 추출한 글자는 계속 볼 수 있습니다.
 - **처리 결과 책갈피** — 제출할 때마다 번호가 붙은 결과 페이지가 추가됩니다. 새 사진을 처리하는 동안에도 이전 결과와 수정한 글자를 볼 수 있습니다. 처리 중인 페이지는 점 세 개로 표시되며, 새로고침하면 책갈피 기록이 초기화됩니다.
+- **PDF 저장** — 결과 화면의 「PDF로 저장」 버튼으로 원본·보정 사진과 정리·요약 내용을 PDF 파일 하나로 내려받을 수 있습니다. 수식과 표도 화면에 보이는 그대로 저장됩니다.
 - **Docker 실행 환경** — Docker Compose로 앱과 의존성을 실행할 수 있도록 구성했습니다. 컨테이너 헬스체크를 추가하고, 업로드 파일과 OCR 모델 캐시는 Docker 볼륨에 저장합니다.
 
 ## 실행
@@ -72,15 +73,23 @@ cp .env.example .env
 ## 파일 구성
 
 ```text
-src/
-├── app.py              # 업로드 처리 및 전처리·OCR 연결
-├── preprocess.py       # OpenCV 전처리 및 자동 원근 보정
-├── ocr.py              # PaddleOCR 문자 추출
-├── summarize.py        # Gemini 요약
-├── templates/index.html
-└── static/
-    ├── style.css
-    └── render.js       # 마크다운, 수식(KaTeX) 표시
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example            # Gemini 설정 예시
+└── src/
+    ├── app.py              # 업로드 처리 및 전처리·OCR·요약 연결
+    ├── preprocess.py       # OpenCV 전처리, 칠판 검출, 원근 보정
+    ├── ocr.py              # PaddleOCR 문자 추출
+    ├── summarize.py        # Gemini 요약
+    ├── templates/index.html
+    └── static/
+        ├── style.css
+        ├── render.js            # 마크다운, 수식(KaTeX) 표시
+        ├── board-adjustment.js  # 칠판 모서리 수동 조정
+        ├── ocr-edit.js          # OCR 텍스트 수정과 재요약
+        ├── pdf-export.js        # 결과 PDF 저장
+        └── interactions.js      # 화면 스크롤 효과
 ```
 
 업로드 이미지는 실행 중 생성되는 `src/static/uploads/`에 저장되며 Git에서 제외합니다.
@@ -95,7 +104,7 @@ processed = preprocess_image(image)
 processed = preprocess_image(image, perspective=True)
 ```
 
-입력과 출력은 `uint8` BGR 3채널 배열입니다. 기본 처리는 최대 변 2800픽셀 제한, 어두운 배경 반전, 원본 색과 획을 유지하는 약한 밝기 보정입니다. 원근·기울기 보정은 선택 기능입니다. 경계를 찾지 못하면 원근 보정은 건너뜁니다. 가로세로 비율은 카메라 가정에 따른 추정값입니다.
+입력과 출력은 `uint8` BGR 3채널 배열입니다. 기본 처리는 최대 변 2800픽셀 제한, 어두운 배경 반전, 원본 색과 획을 유지하는 약한 밝기 보정입니다. 원근·기울기 보정은 선택 기능이며, 함수로 직접 호출할 때 경계를 찾지 못하면 원근 보정 없이 반환합니다. 가로세로 비율은 카메라 가정에 따른 추정값입니다.
 
 사진 한 장을 OCR 없이 처리하려면:
 
@@ -112,12 +121,15 @@ processed = preprocess_image(image, perspective=True)
 - [Flask](https://github.com/pallets/flask) — BSD-3-Clause
 - [KaTeX](https://github.com/KaTeX/KaTeX) — MIT
 - [marked](https://github.com/markedjs/marked) — MIT
+- [DOMPurify](https://github.com/cure53/DOMPurify) — Apache 2.0 또는 MPL 2.0
+- [html2pdf.js](https://github.com/eKoopmans/html2pdf.js) — MIT
 
-웹 업로드에서는 자동 원근 보정을 기본으로 시도합니다. 칠판 경계를 찾지 못한 사진은 원근 보정을 건너뜁니다. `preprocess_image(image)`를 직접 호출할 때는 `perspective=True`를 지정해야 원근 보정이 활성화됩니다.
-
-웹에서 「전처리만 (OCR 없음)」 모드를 선택하면 원근·밝기 보정 이미지만 확인할 수 있습니다. 결과에 전처리 시간과 OCR 시간을 따로 표시합니다. OCR 모드는 모델 초기 로딩과 문자 추론 시간이 추가됩니다.
+웹 업로드에서는 자동 원근 보정을 기본으로 시도합니다. 칠판 경계를 찾지 못한 사진이 있으면 네 모서리를 직접 맞출지, 보정 없이 진행할지 선택할 수 있습니다. `preprocess_image(image)`를 직접 호출할 때는 `perspective=True`를 지정해야 원근 보정이 활성화됩니다.
 
 ## 외부 API
 
 - [Gemini API](https://ai.google.dev/) — OCR로 인식한 텍스트를 정리·요약합니다. 텍스트가 Google 서버로 전송됩니다.
 
+## 라이선스
+
+[MIT License](LICENSE)
